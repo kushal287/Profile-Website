@@ -1,0 +1,252 @@
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const safeUrl = (u) => (/^https?:\/\//i.test(u) ? u : '#');
+
+const ICONS = {
+  github: '<svg viewBox="0 0 24 24"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.600-.3-5.300-1.300-5.300-5.800 0-1.300.5-2.300 1.200-3.100-.1-.3-.5-1.500.1-3.100 0 0 1-.3 3.200 1.200a11 11 0 0 1 5.800 0c2.200-1.500 3.200-1.200 3.200-1.200.6 1.600.2 2.800.1 3.100.8.800 1.200 1.800 1.200 3.100 0 4.500-2.700 5.500-5.300 5.800.4.400.8 1.100.8 2.200v3.300c0 .3.2.700.8.600A11.500 11.500 0 0 0 23.500 12C23.500 5.700 18.300.5 12 .5z"/></svg>',
+  linkedin: '<svg viewBox="0 0 24 24"><path d="M20.4 20.5h-3.6v-5.6c0-1.300 0-3-1.800-3s-2.100 1.400-2.100 2.900v5.700H9.400V9h3.400v1.600h.1c.5-.9 1.600-1.800 3.400-1.800 3.600 0 4.300 2.400 4.300 5.500v6.200zM5.300 7.400a2.100 2.100 0 1 1 0-4.200 2.100 2.100 0 0 1 0 4.200zM7.100 20.500H3.600V9h3.500v11.500zM22.200 0H1.800C.8 0 0 .8 0 1.700v20.600c0 .9.800 1.700 1.800 1.700h20.400c1 0 1.800-.8 1.800-1.700V1.700C24 .8 23.200 0 22.200 0z"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24"><path d="M12 2.200c3.200 0 3.600 0 4.800.1 3.300.1 4.800 1.700 4.900 4.900.1 1.300.1 1.600.1 4.800s0 3.600-.1 4.800c-.1 3.200-1.700 4.800-4.900 4.900-1.300.1-1.600.1-4.800.1s-3.600 0-4.800-.1c-3.300-.1-4.800-1.700-4.900-4.900C2.200 15.600 2.200 15.200 2.200 12s0-3.600.1-4.800C2.400 3.900 4 2.400 7.200 2.300 8.400 2.200 8.800 2.200 12 2.200zM12 0C8.700 0 8.300 0 7.100.1 2.700.3.300 2.700.1 7.100 0 8.300 0 8.700 0 12s0 3.700.1 4.900c.2 4.400 2.600 6.800 7 7C8.300 24 8.700 24 12 24s3.700 0 4.900-.1c4.400-.2 6.800-2.600 7-7 .1-1.200.1-1.600.1-4.900s0-3.700-.1-4.900c-.2-4.400-2.600-6.800-7-7C15.700 0 15.300 0 12 0zm0 5.800a6.200 6.200 0 1 0 0 12.400 6.200 6.200 0 0 0 0-12.400zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.400-11.800a1.400 1.400 0 1 0 0 2.900 1.400 1.400 0 0 0 0-2.900z"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><path d="M2 5.500A1.500 1.500 0 0 1 3.500 4h17A1.500 1.500 0 0 1 22 5.500v13a1.500 1.500 0 0 1-1.500 1.500h-17A1.500 1.500 0 0 1 2 18.500v-13zm2.400.5L12 12.200 19.600 6H4.400zM20 7.900l-8 6.500-8-6.500v10.600h16V7.900z"/></svg>'
+};
+const LANG_COLORS = { JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572A5', HTML: '#e34c26', CSS: '#563d7c', Java: '#b07219', 'C++': '#f34b7d', C: '#aaaaaa', 'C#': '#178600', Go: '#00ADD8', Rust: '#dea584', PHP: '#4F5D95', Shell: '#89e051', Kotlin: '#A97BFF', Dart: '#00B4AB', Jupyter: '#DA5B0B', 'Jupyter Notebook': '#DA5B0B', Ruby: '#701516', Swift: '#F05138', SCSS: '#c6538c', Vue: '#41b883' };
+
+async function api(u) { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); }
+const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtSize = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+
+/* safe lightweight text → HTML (escape first, then format) */
+function fmtText(t) {
+  const blocks = String(t || '').replace(/\r/g, '').split(/\n{2,}/);
+  return blocks.map((b) => {
+    const lines = b.split('\n');
+    const inline = (s) => esc(s)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m.length > 44 ? m.slice(0, 42) + '…' : m}</a>`);
+    if (lines.every((l) => /^\s*[-•*]\s+/.test(l))) return '<ul>' + lines.map((l) => `<li>${inline(l.replace(/^\s*[-•*]\s+/, ''))}</li>`).join('') + '</ul>';
+    return '<p>' + lines.map(inline).join('<br>') + '</p>';
+  }).join('');
+}
+
+/* ---------- theme / nav / scroll ---------- */
+$('#year').textContent = new Date().getFullYear();
+$('#themeBtn').addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('theme', next); } catch {}
+});
+const nav = $('.nav');
+$('#menuBtn').addEventListener('click', () => nav.classList.toggle('open'));
+$$('#navLinks a').forEach((a) => a.addEventListener('click', () => nav.classList.remove('open')));
+
+const prog = $('#progress'), glow = $('#glow');
+addEventListener('scroll', () => {
+  const h = document.documentElement;
+  prog.style.width = (h.scrollTop / (h.scrollHeight - h.clientHeight || 1)) * 100 + '%';
+}, { passive: true });
+addEventListener('pointermove', (e) => {
+  glow.style.setProperty('--mx', e.clientX + 'px'); glow.style.setProperty('--my', e.clientY + 'px');
+}, { passive: true });
+
+// active link
+const secIds = ['about', 'projects', 'posts', 'resume', 'contact'];
+const so = new IntersectionObserver((es) => es.forEach((e) => {
+  if (e.isIntersecting) $$('#navLinks a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id));
+}), { rootMargin: '-45% 0px -50% 0px' });
+secIds.forEach((id) => so.observe($('#' + id)));
+
+// reveal
+const ro = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); ro.unobserve(e.target); } }), { threshold: 0.12 });
+const observeReveals = () => $$('.reveal:not(.in)').forEach((el) => ro.observe(el));
+observeReveals();
+
+// tilt on hero photo
+const tilt = $('#tilt');
+if (matchMedia('(hover:hover)').matches) {
+  tilt.addEventListener('pointermove', (e) => {
+    const r = tilt.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+    tilt.style.transform = `perspective(900px) rotateY(${x * 10}deg) rotateX(${-y * 10}deg)`;
+  });
+  tilt.addEventListener('pointerleave', () => (tilt.style.transform = ''));
+}
+
+// count up
+function countUp(el, to) {
+  if (!to) { el.textContent = '0'; return; }
+  const t0 = performance.now(), d = 1200;
+  const step = (t) => { const p = Math.min(1, (t - t0) / d); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+const countWhenSeen = (el, n) => {
+  const o = new IntersectionObserver((es) => { if (es[0].isIntersecting) { countUp(el, n); o.disconnect(); } }, { threshold: 0.5 });
+  o.observe(el);
+};
+
+/* ---------- typed roles ---------- */
+function typer(words) {
+  const el = $('#typed'); if (!words.length) return;
+  let w = 0, c = 0, del = false;
+  (function tick() {
+    const word = words[w];
+    c += del ? -1 : 1;
+    el.textContent = word.slice(0, c);
+    let wait = del ? 35 : 80;
+    if (!del && c === word.length) { del = true; wait = 1500; }
+    else if (del && c === 0) { del = false; w = (w + 1) % words.length; wait = 350; }
+    setTimeout(tick, wait);
+  })();
+}
+
+/* ---------- profile ---------- */
+function socialLinks(p, cls) {
+  return ['github', 'linkedin', 'instagram'].filter((k) => p.socials[k])
+    .map((k) => `<a class="${cls}" href="${esc(safeUrl(p.socials[k]))}" target="_blank" rel="noopener noreferrer" aria-label="${k}" title="${k}">${ICONS[k]}</a>`).join('');
+}
+function renderProfile(p) {
+  const parts = p.name.split(' ');
+  $('#heroName').innerHTML = esc(parts[0]) + (parts.length > 1 ? ' <em>' + esc(parts.slice(1).join(' ')) + '</em>' : '');
+  document.title = `${p.name} — ${p.headline}`;
+  $('#status').textContent = p.status;
+  $('#heroIntro').textContent = p.intro;
+  $('#locBadge').textContent = p.location;
+  $('#bioText').innerHTML = p.bio.map((t) => `<p>${esc(t)}</p>`).join('');
+  const e = p.education;
+  $('#eduSchool').textContent = e.school; $('#eduDegree').textContent = e.degree;
+  $('#eduYear').textContent = e.year; $('#eduPlace').textContent = e.place;
+  $('#skills').innerHTML = p.skills.map((s) => `<span class="chip">${esc(s)}</span>`).join('');
+  const m = p.skills.concat(p.skills).map((s) => `<span>${esc(s)}</span>`).join('');
+  $('#marquee').innerHTML = m + m;
+  $('#heroSocials').innerHTML = socialLinks(p, 'soc');
+  $('#aboutSocials').innerHTML = ['github', 'linkedin', 'instagram'].filter((k) => p.socials[k])
+    .map((k) => `<a class="conn" href="${esc(safeUrl(p.socials[k]))}" target="_blank" rel="noopener noreferrer"><span>${ICONS[k]}${k[0].toUpperCase() + k.slice(1)}</span>↗</a>`).join('');
+  const cl = ['linkedin', 'github', 'instagram'].filter((k) => p.socials[k])
+    .map((k, i) => `<a class="btn ${i ? 'btn-ghost' : 'btn-primary'}" href="${esc(safeUrl(p.socials[k]))}" target="_blank" rel="noopener noreferrer">${ICONS[k]} ${k[0].toUpperCase() + k.slice(1)}</a>`);
+  if (p.email) cl.push(`<a class="btn btn-ghost" href="mailto:${esc(p.email)}">${ICONS.mail} Email</a>`);
+  $('#contactLinks').innerHTML = cl.join('');
+  if (p.socials.github) $('#allRepos').href = safeUrl(p.socials.github);
+  typer(p.roles);
+}
+
+/* ---------- repos ---------- */
+let REPOS = [], langFilter = 'all';
+function renderRepos() {
+  const q = $('#repoSearch').value.trim().toLowerCase();
+  const list = REPOS.filter((r) => (langFilter === 'all' || r.language === langFilter) &&
+    (!q || (r.name + ' ' + r.description + ' ' + r.topics.join(' ')).toLowerCase().includes(q)));
+  $('#repos').innerHTML = list.length ? list.map((r) => `
+    <article class="card repo">
+      <div class="repo-top">
+        <h3>${esc(r.name.replace(/[-_]/g, ' '))}</h3>
+        <a class="go" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(r.name)} on GitHub">→</a>
+      </div>
+      ${r.pinned ? '<div><span class="badge">Featured</span></div>' : ''}
+      <p>${esc(r.description) || 'No description yet — check the code on GitHub.'}</p>
+      ${r.topics.length ? `<div class="topics">${r.topics.slice(0, 4).map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="repo-meta">
+        ${r.language ? `<span class="lang"><i style="background:${LANG_COLORS[r.language] || '#8b8b9a'}"></i>${esc(r.language)}</span>` : ''}
+        <span>★ ${r.stars}</span><span>⑂ ${r.forks}</span><span>Updated ${fmtDate(r.updatedAt)}</span>
+      </div>
+      <div class="repo-links"><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Code ↗</a>${r.homepage ? `<a href="${esc(safeUrl(r.homepage))}" target="_blank" rel="noopener noreferrer">Live demo ↗</a>` : ''}</div>
+    </article>`).join('') : '<div class="empty">No projects match yet.</div>';
+  $$('.repo').forEach((c) => c.addEventListener('pointermove', (e) => {
+    const b = c.getBoundingClientRect(); c.style.setProperty('--rx', e.clientX - b.left + 'px'); c.style.setProperty('--ry', e.clientY - b.top + 'px');
+  }));
+}
+async function loadRepos() {
+  try {
+    const d = await api('/api/repos');
+    REPOS = d.repos;
+    if (d.user) {
+      $('#repoStat').textContent = REPOS.length || d.user.publicRepos;
+      countWhenSeen($('#statRepos'), d.user.publicRepos);
+      countWhenSeen($('#statFollowers'), d.user.followers);
+    } else $('#repoStat').textContent = REPOS.length;
+    const langs = [...new Set(REPOS.map((r) => r.language).filter(Boolean))];
+    $('#langFilters').innerHTML = langs.length > 1 ? ['all', ...langs].map((l) => `<button class="fbtn ${l === 'all' ? 'on' : ''}" data-l="${esc(l)}">${l === 'all' ? 'All' : esc(l)}</button>`).join('') : '';
+    $$('#langFilters .fbtn').forEach((b) => b.addEventListener('click', () => {
+      langFilter = b.dataset.l; $$('#langFilters .fbtn').forEach((x) => x.classList.toggle('on', x === b)); renderRepos();
+    }));
+    renderRepos();
+    if (!REPOS.length) $('#repos').innerHTML = `<div class="empty">${d.error ? 'Projects will appear here as soon as GitHub responds.' : 'Projects are on the way — stay tuned.'}</div>`;
+  } catch {
+    $('#repos').innerHTML = '<div class="empty">Couldn\'t load projects right now.</div>';
+  }
+}
+$('#repoSearch').addEventListener('input', renderRepos);
+
+/* ---------- posts ---------- */
+let POSTS = [], postFilter = 'all';
+function mediaHtml(p) {
+  const imgs = [...(p.attachments || []).filter((a) => a.type === 'image')];
+  if (p.image) imgs.unshift({ url: p.image, name: p.title || 'Post image' });
+  const vids = (p.attachments || []).filter((a) => a.type === 'video');
+  const files = (p.attachments || []).filter((a) => a.type === 'file');
+  let h = '';
+  if (imgs.length) h += `<div class="media n${Math.min(imgs.length, 4)}">${imgs.slice(0, 4).map((a) => `<img src="${esc(a.url)}" alt="${esc(a.name)}" loading="lazy">`).join('')}</div>`;
+  if (vids.length) h += vids.map((a) => `<div class="media n1"><video src="${esc(a.url)}" controls preload="metadata"></video></div>`).join('');
+  return { top: h, files: files.length ? `<div class="files">${files.map((a) => `<a class="file" href="${esc(a.url)}" target="_blank" rel="noopener" download>📎 ${esc(a.name)}<small>${fmtSize(a.size)}</small></a>`).join('')}</div>` : '' };
+}
+function renderPosts() {
+  const list = POSTS.filter((p) => postFilter === 'all' || p.kind === postFilter);
+  if (!list.length) { $('#feed').innerHTML = `<div class="empty" style="column-span:all">Nothing here yet — check back soon.</div>`; return; }
+  $('#feed').innerHTML = list.map((p) => {
+    const m = mediaHtml(p);
+    const long = (p.text || '').length > 380;
+    const li = p.kind === 'linkedin';
+    return `<article class="card post">
+      ${m.top}
+      <div class="post-body">
+        <div class="post-head">
+          <span class="src ${li ? 'li' : 'own'}">${li ? ICONS.linkedin + 'LinkedIn' : '✦ Update'}</span>
+          <span>${p.pinned ? '<span class="pin">📌 Pinned · </span>' : ''}${fmtDate(p.date)}</span>
+        </div>
+        ${p.title ? `<h3>${esc(p.title)}</h3>` : ''}
+        ${p.text ? `<div class="post-text ${long ? 'clamp' : ''}">${fmtText(p.text)}</div>` : ''}
+        ${long ? '<button class="more">Read more ↓</button>' : ''}
+        ${m.files}
+        ${li && p.url ? `<div class="post-foot"><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">View on LinkedIn ↗</a></div>` : ''}
+      </div>
+    </article>`;
+  }).join('');
+  $$('#feed .more').forEach((b) => b.addEventListener('click', () => {
+    const t = b.previousElementSibling; const open = t.classList.toggle('clamp'); b.textContent = open ? 'Read more ↓' : 'Show less ↑';
+  }));
+  $$('#feed .media img').forEach((i) => i.addEventListener('click', () => { const lb = $('#lightbox'); $('img', lb).src = i.src; lb.hidden = false; }));
+}
+async function loadPosts() {
+  try {
+    POSTS = await api('/api/posts');
+    countWhenSeen($('#statPosts'), POSTS.length);
+    renderPosts();
+  } catch { $('#feed').innerHTML = '<div class="empty" style="column-span:all">Couldn\'t load posts.</div>'; }
+}
+$$('#postTabs .tab').forEach((t) => t.addEventListener('click', () => {
+  postFilter = t.dataset.f; $$('#postTabs .tab').forEach((x) => x.classList.toggle('on', x === t)); renderPosts();
+}));
+$('#lightbox').addEventListener('click', () => ($('#lightbox').hidden = true));
+addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#lightbox').hidden = true; });
+
+/* ---------- resume ---------- */
+async function loadResume() {
+  try {
+    const r = await api('/api/resume');
+    if (!r.available) {
+      $('#resumeMeta').textContent = 'My resume will be available here shortly.';
+      $$('#resumeDl,#resumeView,#heroResume').forEach((a) => a.setAttribute('aria-disabled', 'true'));
+      $('#resumePreview').innerHTML = '<div class="none">No resume uploaded yet.</div>';
+      return;
+    }
+    $('#resumeTitle').textContent = r.label || 'Resume';
+    $('#resumeMeta').textContent = `${r.ext.toUpperCase()} · ${fmtSize(r.size)} · Updated ${fmtDate(r.updatedAt)}`;
+    if (r.ext === 'pdf') $('#resumePreview').innerHTML = '<iframe src="/resume/view#toolbar=0&navpanes=0" title="Resume preview"></iframe>';
+    else { $('#resumePreview').innerHTML = '<div class="none">Preview is available for PDF files.<br>Use Download to open it.</div>'; $('#resumeView').style.display = 'none'; }
+  } catch { /* leave defaults */ }
+}
+
+/* ---------- boot ---------- */
+api('/api/profile').then(renderProfile).catch(() => {}).finally(observeReveals);
+loadRepos(); loadPosts(); loadResume();
+})();

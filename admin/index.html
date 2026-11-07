@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Admin</title>
+<link rel="icon" href="data:,">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/aaddmmiinn/static/admin.css">
+</head>
+<body>
+
+<!-- LOGIN GATE -->
+<div class="gate" id="gate">
+  <form class="gate-card" id="loginForm" autocomplete="off">
+    <div class="lock">🔒</div>
+    <h1>Restricted area</h1>
+    <p>Enter the access code to continue.</p>
+    <input type="password" id="pw" placeholder="Access code" autofocus required>
+    <button class="btn primary" type="submit">Unlock</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+
+<!-- APP -->
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="logo"><span>K</span> Control room</div>
+    <nav id="sideNav">
+      <button data-tab="dash" class="on">📊 Overview</button>
+      <button data-tab="posts">✍️ My posts</button>
+      <button data-tab="linkedin">💼 LinkedIn</button>
+      <button data-tab="github">🐙 GitHub repos</button>
+      <button data-tab="resume">📄 Resume</button>
+      <button data-tab="profile">👤 Profile</button>
+    </nav>
+    <div class="side-foot">
+      <a href="/" target="_blank" class="link">View site ↗</a>
+      <button class="link" id="logout">Log out</button>
+    </div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/aaddmmiinn/static/admin.js"></script>
+</body>
+</html>
