@@ -9,7 +9,7 @@ const fmtSize = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.ma
 let toastT;
 function toast(msg, kind = 'good') {
   const t = $('#toast'); t.textContent = msg; t.className = 'toast show ' + kind;
-  clearTimeout(toastT); toastT = setTimeout(() => (t.className = 'toast'), 3800);
+  clearTimeout(toastT); toastT = setTimeout(() => (t.className = 'toast'), kind === 'bad' ? 9000 : 3800);
 }
 async function api(url, opts = {}) {
   const o = { credentials: 'same-origin', ...opts };
@@ -168,7 +168,8 @@ async function viewLinkedin() {
     <form class="card" id="liForm">
       <h2>Add a post</h2><p class="muted small">Copy the text from your LinkedIn post and paste it here.</p>
       <label>Post text</label><textarea name="text" required placeholder="Paste the LinkedIn post text…" style="min-height:140px"></textarea>
-      <label>Link to the post (optional)</label><input name="url" type="url" placeholder="https://www.linkedin.com/posts/…">
+      <label>Link to the post (optional)</label><input name="url" type="text" placeholder="Paste the post link, or the “Embed this post” code">
+      <p class="muted small" style="margin-top:6px">On LinkedIn open your post → <b>⋯</b> menu → <b>Copy link to post</b>. The post must be <b>public</b> for “Show original post” to work. The link is checked with LinkedIn when you save.</p>
       <div class="grid2"><div><label>Date posted</label><input name="date" type="date"></div><div><label>Image (optional)</label><input name="image" type="file" accept="image/*"></div></div>
       <div class="row between" style="margin-top:16px">
         <label class="row" style="margin:0;text-transform:none;font-family:inherit;font-size:.9rem"><span class="switch"><input type="checkbox" name="ai" checked><i></i></span> Clean with AI</label>
@@ -188,12 +189,12 @@ async function viewLinkedin() {
     <div class="item" data-id="${esc(p.id)}">
       ${sw('li-vis', !p.hidden, p.id)}
       <div class="body">
-        <div>${p.hidden ? '<span class="tag off">hidden</span>' : '<span class="tag ok">visible</span>'}${p.aiFormatted ? '<span class="tag blue">AI cleaned</span>' : ''}<span class="muted small">${fmtDate(p.date)}</span></div>
+        <div>${p.hidden ? '<span class="tag off">hidden</span>' : '<span class="tag ok">visible</span>'}${p.aiFormatted ? '<span class="tag blue">AI cleaned</span>' : ''}${p.embedStatus === 'ok' ? '<span class="tag ok">link verified</span>' : p.embedStatus === 'bad' ? '<span class="tag off">link not found on LinkedIn</span>' : p.url ? '<span class="tag">link unchecked</span>' : '<span class="tag">no link</span>'}<span class="muted small">${fmtDate(p.date)}</span></div>
         <h3>${esc(p.title) || '(untitled)'}</h3>
         <p>${esc(p.content)}</p>
         ${p.url ? `<a class="small muted" href="${esc(p.url)}" target="_blank" rel="noopener">Open on LinkedIn ↗</a>` : ''}
       </div>
-      <div class="acts"><button class="btn sm" data-act="edit">Edit</button><button class="btn sm" data-act="re">✨ Re-clean</button><button class="btn sm danger" data-act="del">Delete</button></div>
+      <div class="acts"><button class="btn sm" data-act="edit">Edit</button><button class="btn sm" data-act="re">✨ Re-clean</button>${p.url ? '<button class="btn sm" data-act="chk">Re-check link</button>' : ''}<button class="btn sm danger" data-act="del">Delete</button></div>
     </div>`).join('') : '<div class="empty">Nothing here yet.</div>'}
   </div><dialog id="liDlg"></dialog>`;
 
@@ -203,7 +204,7 @@ async function viewLinkedin() {
     ['text', 'url', 'date'].forEach((k) => fd.append(k, f[k].value));
     fd.append('ai', f.ai.checked); if (f.image.files[0]) fd.append('image', f.image.files[0]);
     const btn = $('button[type=submit]', f); busy(btn, true); btn.textContent = 'Working…';
-    try { const r = await api('/api/admin/linkedin', { method: 'POST', body: fd }); toast(r.warning ? 'Added (basic clean): ' + r.warning.slice(0, 100) : 'Added ✔', r.warning ? 'bad' : 'good'); viewLinkedin(); }
+    try { const r = await api('/api/admin/linkedin', { method: 'POST', body: fd }); toast(r.linkWarning ? 'Added, but: ' + r.linkWarning : r.warning ? 'Added (basic clean): ' + r.warning.slice(0, 100) : 'Added ✔', r.warning ? 'bad' : 'good'); viewLinkedin(); }
     finally { busy(btn, false); btn.textContent = 'Add post'; }
   }));
   $('#csvGo').addEventListener('click', safe(async (e) => {
@@ -226,6 +227,11 @@ async function viewLinkedin() {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const id = b.closest('.item').dataset.id, p = posts.find((x) => x.id === id);
     if (b.dataset.act === 'del') { if (!confirm('Delete this LinkedIn post from your site?')) return; await api('/api/admin/linkedin/' + id, { method: 'DELETE' }); toast('Deleted'); viewLinkedin(); }
+    if (b.dataset.act === 'chk') {
+      b.disabled = true; b.textContent = 'Checking…';
+      const r = await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { recheck: true } });
+      toast(r.warning || 'Link verified with LinkedIn ✔', r.warning ? 'bad' : 'good'); viewLinkedin();
+    }
     if (b.dataset.act === 're') {
       b.disabled = true; b.textContent = 'Working…';
       const r = await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { reformat: true } });
@@ -242,7 +248,7 @@ async function viewLinkedin() {
       dlg.showModal();
       dlg.onclick = safe(async (ev) => {
         if (ev.target.id === 'lX') dlg.close();
-        if (ev.target.id === 'lS') { await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { title: $('#lT').value, content: $('#lC').value, url: $('#lU').value, date: $('#lD').value } }); dlg.close(); toast('Saved ✔'); viewLinkedin(); }
+        if (ev.target.id === 'lS') { const r = await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { title: $('#lT').value, content: $('#lC').value, url: $('#lU').value, date: $('#lD').value } }); dlg.close(); toast(r.warning ? 'Saved, but: ' + r.warning : 'Saved ✔', r.warning ? 'bad' : 'good'); viewLinkedin(); }
       });
     }
   });

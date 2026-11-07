@@ -105,7 +105,10 @@ function socialLinks(p, cls) {
   return ['github', 'linkedin', 'instagram'].filter((k) => p.socials[k])
     .map((k) => `<a class="${cls}" href="${esc(safeUrl(p.socials[k]))}" target="_blank" rel="noopener noreferrer" aria-label="${k}" title="${k}">${ICONS[k]}</a>`).join('');
 }
+let PROFILE = null;
 function renderProfile(p) {
+  PROFILE = p;
+  if (typeof POSTS !== 'undefined' && POSTS.length) renderPosts(); // refresh LinkedIn cards with the author's name
   const parts = p.name.split(' ');
   $('#heroName').innerHTML = esc(parts[0]) + (parts.length > 1 ? ' <em>' + esc(parts.slice(1).join(' ')) + '</em>' : '');
   document.title = `${p.name} — ${p.headline}`;
@@ -196,23 +199,47 @@ function renderPosts() {
     const m = mediaHtml(p);
     const long = (p.text || '').length > 380;
     const li = p.kind === 'linkedin';
-    return `<article class="card post">
+    const who = PROFILE ? PROFILE.name : 'Kushal Aggarwal';
+    const sub = PROFILE ? `${PROFILE.education.degree} · ${PROFILE.education.school.replace(/\s*\(.*\)/, '')}` : 'B.Tech student';
+    const head = li
+      ? `<div class="li-author">
+           <img src="/assets/kushal.jpg" alt="" loading="lazy">
+           <div class="li-meta"><b>${esc(who)}</b><span>${esc(sub)}</span><span>${fmtDate(p.date)} · on LinkedIn</span></div>
+           <svg class="li-logo" viewBox="0 0 24 24" aria-label="LinkedIn">${ICONS.linkedin.replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>
+         </div>`
+      : `<div class="post-head">
+           <span class="src own">✦ Update</span>
+           <span>${p.pinned ? '<span class="pin">📌 Pinned · </span>' : ''}${fmtDate(p.date)}</span>
+         </div>`;
+    const actions = li && p.url
+      ? `<div class="post-actions">
+           <a class="btn btn-li btn-sm" href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">${ICONS.linkedin.replace('<svg ', '<svg width="14" height="14" fill="currentColor" ')} View on LinkedIn ↗</a>
+           ${p.embed ? `<button class="btn btn-ghost btn-sm" data-embed="${esc(p.embed)}">Show original post</button>` : ''}
+         </div>`
+      : '';
+    return `<article class="card post ${li ? 'is-li' : ''}">
       ${m.top}
       <div class="post-body">
-        <div class="post-head">
-          <span class="src ${li ? 'li' : 'own'}">${li ? ICONS.linkedin + 'LinkedIn' : '✦ Update'}</span>
-          <span>${p.pinned ? '<span class="pin">📌 Pinned · </span>' : ''}${fmtDate(p.date)}</span>
-        </div>
+        ${head}
         ${p.title ? `<h3>${esc(p.title)}</h3>` : ''}
         ${p.text ? `<div class="post-text ${long ? 'clamp' : ''}">${fmtText(p.text)}</div>` : ''}
         ${long ? '<button class="more">Read more ↓</button>' : ''}
         ${m.files}
-        ${li && p.url ? `<div class="post-foot"><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">View on LinkedIn ↗</a></div>` : ''}
+        ${actions}
+        <div class="embed-slot"></div>
       </div>
     </article>`;
   }).join('');
   $$('#feed .more').forEach((b) => b.addEventListener('click', () => {
     const t = b.previousElementSibling; const open = t.classList.toggle('clamp'); b.textContent = open ? 'Read more ↓' : 'Show less ↑';
+  }));
+  $$('#feed [data-embed]').forEach((b) => b.addEventListener('click', () => {
+    const slot = b.closest('.post-body').querySelector('.embed-slot');
+    if (slot.firstChild) { slot.innerHTML = ''; b.textContent = 'Show original post'; return; }
+    const src = b.dataset.embed;
+    if (!/^https:\/\/www\.linkedin\.com\/embed\//.test(src)) return;
+    slot.innerHTML = `<div class="embed"><iframe src="${esc(src)}" title="LinkedIn post" loading="lazy" allowfullscreen></iframe></div>`;
+    b.textContent = 'Hide original post';
   }));
   $$('#feed .media img').forEach((i) => i.addEventListener('click', () => { const lb = $('#lightbox'); $('img', lb).src = i.src; lb.hidden = false; }));
 }

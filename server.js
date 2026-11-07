@@ -375,13 +375,62 @@ app.get('/api/repos', async (req, res) => {
   });
 });
 
+// LinkedIn's official embed URL for a public post link (shows the original post exactly as on LinkedIn)
+const LI_HOST = /^https?:\/\/([\w-]+\.)*linkedin\.com\//i;
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
+// Accepts a normal post link, a feed/update link, an embed link, or the whole "Embed this post" <iframe> code.
+function parseLinkedinInput(input) {
+  let s = String(input || '').trim();
+  const iframe = s.match(/src=["']([^"']+)["']/i);
+  if (iframe) s = iframe[1].trim();
+  if (!s) return { url: '', embed: '' };
+  if (!LI_HOST.test(s)) return { error: 'That is not a linkedin.com link' };
+  const m = s.match(/(activity|ugcPost|share)[:-](\d{15,})/);
+  const embed = m ? `https://www.linkedin.com/embed/feed/update/urn:li:${m[1]}:${m[2]}` : '';
+  // an embed link is not a page people can open, so visitors get the normal permalink instead
+  const url = m && /\/embed\//.test(s) ? `https://www.linkedin.com/feed/update/urn:li:${m[1]}:${m[2]}/` : s;
+  return { url: url.slice(0, 500), embed };
+}
+// LinkedIn answers 404 for an embed that does not exist / is not public.
+async function checkEmbed(embed) {
+  if (!embed) return 'none';
+  try {
+    const r = await fetch(embed, { headers: { 'User-Agent': BROWSER_UA }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
+    r.body?.cancel?.();
+    if (r.status === 404 || r.status === 410) return 'bad';
+    return r.ok ? 'ok' : 'unknown';
+  } catch { return 'unknown'; }
+}
+// Stores the link on a post and verifies it. Returns { error } or { warning }.
+async function setLinkedinLink(p, input) {
+  const r = parseLinkedinInput(input);
+  if (r.error) return { error: r.error };
+  p.url = r.url; p.embed = r.embed; p.embedStatus = await checkEmbed(r.embed);
+  if (p.embedStatus === 'bad') return { warning: "LinkedIn can't find a public post at this link, so the “Show original post” button stays hidden. On LinkedIn open the post → ⋯ menu → Copy link to post (the post must be public), then edit this post and paste the link again." };
+  if (r.url && p.embedStatus === 'none') return { warning: 'This link has no post ID, so only the “View on LinkedIn” button is shown. Use the post’s own link (⋯ → Copy link to post) to also show the original post.' };
+  return { warning: null };
+}
+// verify links of imported posts one by one in the background
+let checking = false;
+async function backgroundCheckEmbeds() {
+  if (checking) return;
+  checking = true;
+  try {
+    for (const p of db.linkedin) {
+      if (!p.url || p.embedStatus) continue;
+      const r = parseLinkedinInput(p.url);
+      p.embed = r.embed || ''; p.embedStatus = await checkEmbed(p.embed); saveDb();
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+  } finally { checking = false; }
+}
 function publicFeed() {
   const own = db.posts.filter((p) => !p.hidden).map((p) => ({
     id: p.id, kind: 'own', text: p.text, attachments: p.attachments, pinned: !!p.pinned, date: p.createdAt
   }));
   const li = db.linkedin.filter((p) => !p.hidden).map((p) => ({
     // hide the title when it is just the first line of the text (avoids showing the same words twice)
-    id: p.id, kind: 'linkedin', title: p.title && !p.content.startsWith(p.title.replace(/…$/, '')) ? p.title : '', text: p.content, url: p.url, image: p.image || '', attachments: [], pinned: false, date: p.date
+    id: p.id, kind: 'linkedin', title: p.title && !p.content.startsWith(p.title.replace(/…$/, '')) ? p.title : '', text: p.content, url: p.url, embed: p.embedStatus === 'bad' ? '' : (p.embed || parseLinkedinInput(p.url).embed || ''), image: p.image || '', attachments: [], pinned: false, date: p.date
   }));
   return [...own, ...li].sort((a, b) => (b.pinned - a.pinned) || new Date(b.date) - new Date(a.date));
 }
@@ -512,19 +561,20 @@ admin.post('/ai/format', async (req, res) => {
 admin.post('/linkedin', imgUpload.single('image'), async (req, res) => {
   const raw = String(req.body.text || '').trim();
   if (!raw) return res.status(400).json({ error: 'Paste the post text' });
-  let url = String(req.body.url || '').trim();
-  if (url && !/^https?:\/\/([\w-]+\.)*linkedin\.com\//i.test(url)) return res.status(400).json({ error: 'URL must be a linkedin.com link' });
+  const link = parseLinkedinInput(req.body.url);
+  if (link.error) return res.status(400).json({ error: link.error });
   const useAi = req.body.ai !== 'false';
   const f = useAi ? await aiFormat(raw) : localFormat(raw);
   const date = req.body.date ? new Date(req.body.date) : new Date();
   const p = {
-    id: uid(), raw: raw.slice(0, 10000), title: f.title, content: f.content, url,
+    id: uid(), raw: raw.slice(0, 10000), title: f.title, content: f.content, url: '',
     date: isNaN(date) ? now() : date.toISOString(),
     image: req.file ? `/uploads/posts/${req.file.filename}` : '',
     hidden: false, aiFormatted: f.source === 'ai', createdAt: now()
   };
+  const lk = await setLinkedinLink(p, req.body.url);
   db.linkedin.push(p); saveDb();
-  res.json({ post: p, warning: f.error || null });
+  res.json({ post: p, warning: [f.error, lk.warning].filter(Boolean).join(' ') || null, linkWarning: lk.warning || null });
 });
 admin.post('/linkedin/import', csvUpload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Upload Shares.csv from your LinkedIn data export' });
@@ -551,7 +601,7 @@ admin.post('/linkedin/import', csvUpload.single('file'), (req, res) => {
     added++;
   }
   saveDb();
-  if (added) backgroundClean();
+  if (added) { backgroundClean(); backgroundCheckEmbeds(); }
   res.json({ added, skipped, cleaning: added > 0 });
 });
 admin.post('/linkedin/ai-all', async (req, res) => {
@@ -577,9 +627,10 @@ admin.put('/linkedin/:id', async (req, res) => {
   if (typeof b.title === 'string') p.title = b.title.trim().slice(0, 140);
   if (typeof b.content === 'string') p.content = b.content.trim().slice(0, 10000);
   if (typeof b.hidden === 'boolean') p.hidden = b.hidden;
-  if (typeof b.url === 'string') {
-    if (b.url && !/^https?:\/\/([\w-]+\.)*linkedin\.com\//i.test(b.url)) return res.status(400).json({ error: 'URL must be a linkedin.com link' });
-    p.url = b.url.trim();
+  if (typeof b.url === 'string' || b.recheck) {
+    const lk = await setLinkedinLink(p, typeof b.url === 'string' ? b.url : p.url);
+    if (lk.error) return res.status(400).json({ error: lk.error });
+    warning = [warning, lk.warning].filter(Boolean).join(' ') || null;
   }
   if (b.date) { const d = new Date(b.date); if (!isNaN(d)) p.date = d.toISOString(); }
   saveDb(); res.json({ post: p, warning });
