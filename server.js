@@ -653,7 +653,7 @@ app.get('/assets/kds-logo', (req, res, next) => {
   const dir = path.join(ROOT, 'public', 'assets');
   const f = ['png', 'webp', 'jpg', 'jpeg', 'svg'].map((e) => path.join(dir, 'kds-logo.' + e)).find((p) => fs.existsSync(p));
   if (!f) return next();
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', 'no-cache'); // revalidate, so swapping the file shows up straight away
   res.sendFile(f);
 });
 app.use(express.static(path.join(ROOT, 'public'), {

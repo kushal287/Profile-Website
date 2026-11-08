@@ -29,8 +29,8 @@ session is a signed httpOnly cookie, and 6 wrong tries lock that IP out for 15 m
 
 Admin → Profile → **Studio link (KDS)**: set the studio name and website address. The KDS logo and link then
 show in the navigation bar, the About section and the footer. Leave the address empty to hide the link.
-The built-in logo is `public/assets/kds-logo.svg`; to use your original image, save it as
-`public/assets/kds-logo.png` (it takes priority automatically).
+Save your original logo as `public/assets/kds-logo.png` (or `.webp` / `.jpg` / `.svg`). Until that file
+exists, only the text "KDS" is shown.
 
 ## Speed and images
 

@@ -285,7 +285,7 @@ async function viewProfile() {
   <div class="card"><h2>Studio link (KDS)</h2>
     <p class="muted small">Your studio's logo and a link to its website appear on the home page (navigation bar, About section and footer). Leave the address empty to hide the link — the logo stays in the footer.</p>
     <div class="grid2">${f('stName', 'Studio name', (p.studio && p.studio.name) || 'Kushal Developer Studios')}${f('stUrl', 'Studio website address', (p.studio && p.studio.url) || '', 'https://your-studio-website.com')}</div>
-    <p class="muted small" style="margin-top:8px">Logo: it uses the built-in KDS logo. To use your original image, save it as <code>public/assets/kds-logo.png</code> in the project (it replaces the built-in one automatically).</p></div>
+    <p class="muted small" style="margin-top:8px">Logo: save your original KDS logo as <code>public/assets/kds-logo.png</code> in the project (or .webp / .jpg). Until that file exists, only the text “KDS” is shown — no substitute logo is used.</p></div>
   <button class="btn primary" id="saveProfile">Save profile</button>`;
   const lines = (id) => $(id).value.split('\n').map((s) => s.trim()).filter(Boolean);
   // "Languages: Python @85, TypeScript" -> [{ name, items: [{ name, level? }] }]
