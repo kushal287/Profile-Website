@@ -59,7 +59,7 @@ const DEFAULT_DB = {
     ],
     email: '',
     studio: { name: 'Kushal Developer Studios', short: 'KDS', url: '' }, // set the link in Admin → Profile
-    followers: { linkedin: 0, instagram: 0 }, // typed in by hand (these sites don't allow reading them)
+    followers: { linkedin: '', instagram: '' }, // typed in by hand, e.g. "300+" (these sites don't allow reading them)
     statsShow: { projects: true, posts: true, githubFollowers: true }, // automatic numbers can be switched off
     statsOverride: { projects: '', posts: '', githubFollowers: '' }, // blank = use the real value
     customStats: [], // [{ label, value }] typed in by hand, e.g. Hackathons: 3
@@ -81,6 +81,12 @@ function loadDb() {
     db = { ...structuredClone(DEFAULT_DB), ...raw, profile: { ...structuredClone(DEFAULT_DB.profile), ...(raw.profile || {}) } };
     const OLD_SKILLS = JSON.stringify(['Web Development', 'JavaScript', 'Python', 'C / C++', 'Data Structures', 'Git & GitHub', 'Problem Solving', 'UI Design', 'AI / ML Curiosity']);
     if (JSON.stringify(db.profile.skills) === OLD_SKILLS) db.profile.skills = [...DEFAULT_DB.profile.skills];
+    // follower counts used to be numbers; they are now free text (so "300+" works)
+    db.profile.followers = db.profile.followers || {};
+    for (const k of ['linkedin', 'instagram']) {
+      const v = db.profile.followers[k];
+      db.profile.followers[k] = typeof v === 'number' ? (v > 0 ? String(v) : '') : String(v ?? '');
+    }
   } catch {
     db = structuredClone(DEFAULT_DB);
     saveDb();
@@ -505,9 +511,10 @@ admin.put('/profile', (req, res) => {
   }
   if (b.followers && typeof b.followers === 'object') {
     p.followers = p.followers || {};
+    // text is allowed so you can write things like "300+" or "1.2K"; blank or 0 hides it
     for (const k of ['linkedin', 'instagram']) {
-      const n = Math.floor(Number(b.followers[k]));
-      if (Number.isFinite(n) && n >= 0 && n <= 1e9) p.followers[k] = n;
+      const v = str(String(b.followers[k] ?? ''), 12);
+      if (v !== undefined) p.followers[k] = v;
     }
   }
   if (b.studio && typeof b.studio === 'object') {

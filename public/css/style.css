@@ -359,3 +359,11 @@ a.kds-foot:hover{color:var(--text)}
   .studio{gap:16px}
   .nav-links a{padding:14px}
 }
+
+/* ---------- footer credit ---------- */
+.made-by{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+.made-by b{color:var(--text);font-weight:600}
+.kds-made{display:inline-flex;align-items:center;gap:8px;color:var(--text);font-weight:600;transition:.2s}
+a.kds-made:hover{color:var(--accent)}
+.made-by .kds-tile.xs{padding:2px 8px}.made-by .kds-tile.xs img{height:18px}
+.btn .kds-tile.xs{margin-left:-8px;padding:3px 8px}.btn .kds-tile.xs img{height:18px}

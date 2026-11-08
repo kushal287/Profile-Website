@@ -307,17 +307,18 @@ function renderStats() {
   const custom = ((PROFILE && PROFILE.customStats) || []).filter((c) => c.label && String(c.value).trim() && String(c.value).trim() !== '0');
   const ov = (PROFILE && PROFILE.statsOverride) || {};
   // a value typed in the admin panel replaces the real one; blank means "use the real value"
-  const val = (k, real) => {
-    const o = String(ov[k] ?? '').trim();
-    if (!o) return real;
+  // typed values may be plain numbers (they count up) or text such as "300+" / "1.2K" (shown as written)
+  const val = (k, real, typedOnly) => {
+    const o = String(typedOnly ? real ?? '' : ov[k] ?? '').trim();
+    if (!o) return typedOnly ? 0 : real;
     return /^\d[\d,]*$/.test(o) ? +o.replace(/,/g, '') : o;
   };
   const items = [
     show.projects !== false && ['Projects', val('projects', REPOS.length)],
     show.posts !== false && ['Posts shared', val('posts', POSTS.length)],
     show.githubFollowers !== false && ['GitHub followers', val('githubFollowers', GH_FOLLOWERS)],
-    ['LinkedIn followers', +f.linkedin || 0],
-    ['Instagram followers', +f.instagram || 0],
+    ['LinkedIn followers', val('', f.linkedin, true)],
+    ['Instagram followers', val('', f.instagram, true)],
     // typed-in numbers count up; text like "5+" is shown as written
     ...custom.map((c) => [c.label, /^\d[\d,]*$/.test(c.value.trim()) ? +c.value.replace(/,/g, '') : c.value.trim()])
   ].filter((x) => x && (typeof x[1] === 'string' ? x[1] !== '' : x[1] > 0));

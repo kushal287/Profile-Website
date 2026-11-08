@@ -278,7 +278,8 @@ async function viewProfile() {
     <p class="muted small">Every number here is editable. A number appears on the site only when it is above 0 (or is text like “5+”). The first three are read automatically from your site and GitHub — turn one off to hide it, or type your own value to replace the real one. LinkedIn and Instagram don't let websites read follower counts, so type those yourself.</p>
     <label>Automatic numbers — show / hide, or type your own value instead</label>
     ${[['sProj', 'oProj', 'projects', 'Projects', o.reposVisible], ['sPosts', 'oPosts', 'posts', 'Posts shared', o.postsLive], ['sGhF', 'oGhF', 'githubFollowers', 'GitHub followers', o.githubFollowers]].map(([id, oid, k, l, n]) => `<div class="stat-edit"><label class="row" style="margin:0;text-transform:none;font-family:inherit;font-size:.9rem"><span class="switch"><input type="checkbox" id="${id}" ${(p.statsShow || {})[k] === false ? '' : 'checked'}><i></i></span> ${l}</label><input id="${oid}" value="${esc((p.statsOverride || {})[k] || '')}" placeholder="Real value: ${n ?? 0} — type to replace"></div>`).join('')}
-    <div class="grid2">${f('fLi', 'LinkedIn followers (type it)', (p.followers && p.followers.linkedin) || 0)}${f('fIg', 'Instagram followers (type it)', (p.followers && p.followers.instagram) || 0)}</div>
+    <div class="grid2">${f('fLi', 'LinkedIn followers (type it)', (p.followers && p.followers.linkedin) || '', 'e.g. 300+')}${f('fIg', 'Instagram followers (type it)', (p.followers && p.followers.instagram) || '', 'e.g. 1.2K or 500+')}</div>
+    <p class="muted small" style="margin-top:6px">Write it however you like — <code>300</code>, <code>300+</code>, <code>1.2K</code>. Plain numbers count up; anything with a symbol is shown exactly as typed. Leave empty (or 0) to hide.</p>
     <label>Your own numbers — one per line: Label: value</label>
     <textarea id="pCustom" placeholder="Hackathons: 3&#10;Certifications: 2&#10;Years coding: 5+">${esc((p.customStats || []).map((c) => c.label + ': ' + c.value).join('\n'))}</textarea>
     <p class="muted small" style="margin-top:6px">Numbers count up on the page; text like “5+” is shown exactly as written. Up to 6.</p></div>
@@ -302,7 +303,7 @@ async function viewProfile() {
     try {
       await api('/api/admin/profile', { method: 'PUT', json: {
         name: $('#pName').value, headline: $('#pHead').value, location: $('#pLoc').value, status: $('#pStatus').value, intro: $('#pIntro').value,
-        bio: $('#pBio').value.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean), roles: lines('#pRoles'), skills: lines('#pSkills'), tech: parseTech($('#pTech').value), followers: { linkedin: Number($('#fLi').value) || 0, instagram: Number($('#fIg').value) || 0 },
+        bio: $('#pBio').value.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean), roles: lines('#pRoles'), skills: lines('#pSkills'), tech: parseTech($('#pTech').value), followers: { linkedin: $('#fLi').value, instagram: $('#fIg').value },
         studio: { name: $('#stName').value, url: $('#stUrl').value },
         statsShow: { projects: $('#sProj').checked, posts: $('#sPosts').checked, githubFollowers: $('#sGhF').checked },
         statsOverride: { projects: $('#oProj').value, posts: $('#oPosts').value, githubFollowers: $('#oGhF').value },

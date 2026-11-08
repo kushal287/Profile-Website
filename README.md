@@ -29,8 +29,9 @@ session is a signed httpOnly cookie, and 6 wrong tries lock that IP out for 15 m
 
 Admin → Profile → **Studio link (KDS)**: set the studio name and website address. The KDS logo and link then
 show in the navigation bar, the About section and the footer. Leave the address empty to hide the link.
-Save your original logo as `public/assets/kds-logo.png` (or `.webp` / `.jpg` / `.svg`). Until that file
-exists, only the text "KDS" is shown.
+The logo is `public/assets/kds-logo.webp`. To swap it, save a new file as `public/assets/kds-logo.png`
+(PNG takes priority). The logo appears in the navigation bar, the "Visit KDS" button, the About card and
+the "Made by Kushal Aggarwal · Kushal Developer Studios" line in the footer.
 
 ## Speed and images
 
@@ -44,7 +45,7 @@ exists, only the text "KDS" is shown.
 
 Profile → **Numbers on the home page**: Projects, Posts shared and GitHub followers are real values read
 automatically (switch any off). LinkedIn / Instagram followers are typed in by hand because those sites
-don't allow reading them. You can also add your own numbers (`Hackathons: 3`, `Years coding: 5+`).
+don't allow reading them (write `300`, `300+` or `1.2K` — text is shown exactly as typed). You can also add your own numbers (`Hackathons: 3`, `Years coding: 5+`).
 A number shows only when it is above 0, and empty sections hide themselves.
 
 ## Interactive tech section
