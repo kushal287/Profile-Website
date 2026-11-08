@@ -20,19 +20,27 @@ session is a signed httpOnly cookie, and 6 wrong tries lock that IP out for 15 m
 
 | Tab | What it does |
 |---|---|
-| My posts | Write posts, attach images / video / files, pin, hide, edit, delete |
-| LinkedIn | Add posts (paste), bulk-import `Shares.csv`, AI-clean, hide/show, edit, delete |
+| My posts | Write posts, attach images / video / files, add inline links, pin, hide, edit, delete |
 | GitHub repos | Toggle each repo's visibility, feature it, override its description |
 | Resume | Upload new versions, choose which is live, rename, delete |
-| Profile | Edit bio, roles, skills, education, social links |
+| Profile | Edit bio, roles, skills, **tech stack** (`Category: Item, Item @80`), education, social links |
 
-## LinkedIn
+## Interactive tech section
 
-LinkedIn has no public API for reading your own posts, and scraping it breaks their terms. Use either:
-1. **Paste** a post into the LinkedIn tab, or
-2. **Bulk import:** LinkedIn → Settings → Data privacy → *Get a copy of your data* → Posts → upload `Shares.csv`.
+- **Language mix** is measured from the code in your visible GitHub repos (forks are left out by default). Click a language to filter Projects.
+- **Stack explorer** shows the categories you set in Profile → Tech stack. Clicking an item filters your projects when it matches a GitHub language.
+- **Live commit log** shows the latest commits from your visible repos.
+- **Terminal** in the Contact section: type `help`. Press `/` anywhere to jump to it.
 
-## AI cleaning
+## Posts and links
+
+Write a post, attach files, and use **🔗 Add link** to put a link inside the sentence. It is stored as
+`[text](https://url)` and shows on the site as plain clickable text within the paragraph. Select a word
+first to turn it into the link. Plain `https://…` addresses are linked automatically too.
+
+## AI "Tidy" button (optional)
+
+The post box has a **Tidy with AI** button that fixes spelling and spacing and removes hashtags.
 
 Providers are tried in order, and the first that works wins:
 1. **Your key** (`AI_PROVIDER` + `AI_API_KEY` in `.env`): `groq`, `gemini`, `openrouter` or `xai`. Free keys: console.groq.com, aistudio.google.com.

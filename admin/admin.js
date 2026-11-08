@@ -37,7 +37,7 @@ $('#logout').addEventListener('click', async () => { await api('/api/admin/logou
 api('/api/admin/me').then((d) => (d.authed ? showApp() : showGate())).catch(showGate);
 
 /* ---------- nav ---------- */
-const TABS = { dash: viewDash, posts: viewPosts, linkedin: viewLinkedin, github: viewGithub, resume: viewResume, profile: viewProfile };
+const TABS = { dash: viewDash, posts: viewPosts, github: viewGithub, resume: viewResume, profile: viewProfile };
 function go(tab) {
   if (!TABS[tab]) tab = 'dash';
   location.hash = tab;
@@ -56,16 +56,44 @@ async function viewDash() {
   main.innerHTML = head('Overview', 'Everything about your site at a glance.') + `
   <div class="stats">
     <div class="stat"><b>${o.posts}</b><span>My posts</span></div>
-    <div class="stat"><b>${o.linkedin}</b><span>LinkedIn posts (${o.linkedinHidden} hidden)</span></div>
     <div class="stat"><b>${o.reposVisible}/${o.repos}</b><span>Repos visible</span></div>
     <div class="stat"><b>${o.resume}</b><span>Resume versions</span></div>
   </div>
-  <div class="card"><h2>AI formatter${o.cleanPending ? ` <span class="tag blue">${o.cleanPending} waiting${o.cleaning ? " · cleaning now" : ""}</span>` : ""}</h2><p class="muted small">${o.ai.length ? "✅ Providers (tried in order): " + esc(o.ai.join(" → ")) + ". LinkedIn posts are cleaned — hashtags removed, tidy paragraphs, auto title." : "⚠️ No AI provider — using the basic built-in cleaner."}</p></div>
+  <div class="card"><h2>AI “Tidy” button</h2><p class="muted small">${o.ai.length ? "✅ Providers (tried in order): " + esc(o.ai.join(" → ")) + ". The “Tidy with AI” button in the post box fixes spelling, spacing and removes hashtags." : "⚠️ No AI provider — the Tidy button uses a basic built-in cleaner."}</p></div>
   ${o.githubError ? `<div class="card"><h2>GitHub</h2><p class="muted small">⚠️ ${esc(o.githubError)} — showing cached data if available.</p></div>` : ''}
   <div class="card"><h2>Quick tips</h2>
     <p class="muted small">• Visitors never see a link to this page — only you know the address.<br>
-    • LinkedIn doesn't allow sites to read your posts automatically. Paste a post, or upload the <b>Shares.csv</b> file from LinkedIn → Settings → Data privacy → <i>Get a copy of your data</i> to bulk-import every post.<br>
+    • Add a link inside a post with the <b>🔗 Add link</b> button — it becomes clickable text right inside your paragraph.<br>
     • Hidden items stay here in the panel, just not on the public site.</p></div>`;
+}
+
+/* ---------- inline link helper ---------- */
+// Inserts [text](url) at the cursor so the link reads as normal text inside the paragraph.
+function addLink(ta) {
+  const s0 = ta.selectionStart, e0 = ta.selectionEnd;
+  const selected = ta.value.slice(s0, e0);
+  const dlg = document.createElement('dialog');
+  dlg.innerHTML = `<h2>Add a link</h2><p class="muted small">It shows up as clickable text inside your paragraph.</p>
+    <label>Text to show</label><input id="alT" value="${esc(selected)}" placeholder="e.g. my new project">
+    <label>Link (URL)</label><input id="alU" placeholder="https://…">
+    <div class="row between" style="margin-top:20px"><button class="btn" type="button" id="alX">Cancel</button><button class="btn primary" type="button" id="alOk">Insert link</button></div>`;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  const close = () => { dlg.close(); dlg.remove(); ta.focus(); };
+  dlg.addEventListener('cancel', () => dlg.remove());
+  dlg.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#alOk', dlg).click(); } });
+  dlg.addEventListener('click', (e) => {
+    if (e.target.id === 'alX') close();
+    if (e.target.id === 'alOk') {
+      let url = $('#alU', dlg).value.trim();
+      if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+      if (!/^https?:\/\/[^\s()]+$/i.test(url)) return toast('Enter a valid link (no spaces or brackets)', 'bad');
+      const label = ($('#alT', dlg).value.trim() || url).replace(/[\[\]]/g, '');
+      ta.setRangeText('[' + label + '](' + url + ')', s0, e0, 'end');
+      close();
+    }
+  });
+  setTimeout(() => $(selected ? '#alU' : '#alT', dlg).focus(), 40);
 }
 
 /* ---------- my posts ---------- */
@@ -77,6 +105,7 @@ async function viewPosts() {
     <h2>New post</h2>
     <label>What's on your mind?</label>
     <textarea name="text" placeholder="Share an update, a win, something you learned…" maxlength="10000"></textarea>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="addLink">🔗 Add link</button><span class="muted small">Inserted as clickable text inside your paragraph. Tip: select a word first to turn it into the link.</span></div>
     <label>Attachments (images, video, PDF, zip — up to 8 files, 50 MB each)</label>
     <div class="drop" id="drop">Click or drop files here<input type="file" name="files" id="files" multiple hidden></div>
     <div id="picked"></div>
@@ -112,6 +141,7 @@ async function viewPosts() {
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
   drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); });
   $('#picked').addEventListener('click', (e) => { const b = e.target.closest('[data-rm]'); if (b) { picked.splice(+b.dataset.rm, 1); renderPicked(); } });
+  $('#addLink').addEventListener('click', () => addLink(form.text));
   $('#aiTidy').addEventListener('click', safe(async (e) => {
     const ta = form.text; if (!ta.value.trim()) return;
     busy(e.target, true); e.target.textContent = '✨ Working…';
@@ -140,6 +170,7 @@ function openEdit(p) {
   const draw = () => {
     dlg.innerHTML = `<h2>Edit post</h2>
     <label>Text</label><textarea id="eText" style="min-height:160px">${esc(p.text)}</textarea>
+    <div style="margin-top:8px"><button type="button" class="btn sm" id="eLink">🔗 Add link</button></div>
     <label>Attachments</label>
     <div>${p.attachments.filter((a) => !remove.has(a.url)).map((a) => `<span class="attach-pill">${esc(a.name)} <button data-rm="${esc(a.url)}">✕</button></span>`).join('') || '<span class="muted small">none</span>'}</div>
     <div style="margin-top:10px"><input type="file" id="eFiles" multiple></div>
@@ -150,106 +181,11 @@ function openEdit(p) {
     const rm = e.target.closest('[data-rm]');
     if (rm) { const t = $('#eText').value; remove.add(rm.dataset.rm); draw(); $('#eText').value = t; }
     if (e.target.id === 'eCancel') dlg.close();
+    if (e.target.id === 'eLink') addLink($('#eText'));
     if (e.target.id === 'eSave') {
       const fd = new FormData(); fd.append('text', $('#eText').value); fd.append('removeAttachments', JSON.stringify([...remove]));
       [...$('#eFiles').files].forEach((f) => fd.append('files', f));
       await api('/api/admin/posts/' + p.id, { method: 'PUT', body: fd }); dlg.close(); toast('Saved ✔'); viewPosts();
-    }
-  });
-}
-
-/* ---------- LinkedIn ---------- */
-let liFilter = 'all';
-async function viewLinkedin() {
-  const posts = await api('/api/admin/linkedin');
-  const list = posts.filter((p) => liFilter === 'all' || (liFilter === 'hidden' ? p.hidden : !p.hidden));
-  main.innerHTML = head('LinkedIn posts', 'Everything you add here is cleaned up (no hashtags, tidy paragraphs) and shown in your site theme. Hide any post — you will still see it here.') + `
-  <div class="grid2">
-    <form class="card" id="liForm">
-      <h2>Add a post</h2><p class="muted small">Copy the text from your LinkedIn post and paste it here.</p>
-      <label>Post text</label><textarea name="text" required placeholder="Paste the LinkedIn post text…" style="min-height:140px"></textarea>
-      <label>Link to the post (optional)</label><input name="url" type="text" placeholder="Paste the post link, or the “Embed this post” code">
-      <p class="muted small" style="margin-top:6px">On LinkedIn open your post → <b>⋯</b> menu → <b>Copy link to post</b>. The post must be <b>public</b> for “Show original post” to work. The link is checked with LinkedIn when you save.</p>
-      <div class="grid2"><div><label>Date posted</label><input name="date" type="date"></div><div><label>Image (optional)</label><input name="image" type="file" accept="image/*"></div></div>
-      <div class="row between" style="margin-top:16px">
-        <label class="row" style="margin:0;text-transform:none;font-family:inherit;font-size:.9rem"><span class="switch"><input type="checkbox" name="ai" checked><i></i></span> Clean with AI</label>
-        <button class="btn primary" type="submit">Add post</button>
-      </div>
-    </form>
-    <div class="card">
-      <h2>Bulk import</h2><p class="muted small">Get every post at once: LinkedIn → Settings → Data privacy → <b>Get a copy of your data</b> → choose “Posts” → download → unzip → upload <b>Shares.csv</b>.</p>
-      <label>Shares.csv</label><input type="file" id="csv" accept=".csv">
-      <div class="row" style="margin-top:16px"><button class="btn primary" id="csvGo">Import posts</button><button class="btn" id="aiAll">✨ Clean all with AI</button></div>
-      <p class="muted small" style="margin-top:12px">Imports are de-duplicated by post link. “Clean all with AI” processes up to 15 posts per click.</p>
-    </div>
-  </div>
-  <div class="tabs">${['all', 'visible', 'hidden'].map((f) => `<button class="pill ${liFilter === f ? 'on' : ''}" data-f="${f}">${f[0].toUpperCase() + f.slice(1)}</button>`).join('')}</div>
-  <div class="card">
-    ${list.length ? list.map((p) => `
-    <div class="item" data-id="${esc(p.id)}">
-      ${sw('li-vis', !p.hidden, p.id)}
-      <div class="body">
-        <div>${p.hidden ? '<span class="tag off">hidden</span>' : '<span class="tag ok">visible</span>'}${p.aiFormatted ? '<span class="tag blue">AI cleaned</span>' : ''}${p.embedStatus === 'ok' ? '<span class="tag ok">link verified</span>' : p.embedStatus === 'bad' ? '<span class="tag off">link not found on LinkedIn</span>' : p.url ? '<span class="tag">link unchecked</span>' : '<span class="tag">no link</span>'}<span class="muted small">${fmtDate(p.date)}</span></div>
-        <h3>${esc(p.title) || '(untitled)'}</h3>
-        <p>${esc(p.content)}</p>
-        ${p.url ? `<a class="small muted" href="${esc(p.url)}" target="_blank" rel="noopener">Open on LinkedIn ↗</a>` : ''}
-      </div>
-      <div class="acts"><button class="btn sm" data-act="edit">Edit</button><button class="btn sm" data-act="re">✨ Re-clean</button>${p.url ? '<button class="btn sm" data-act="chk">Re-check link</button>' : ''}<button class="btn sm danger" data-act="del">Delete</button></div>
-    </div>`).join('') : '<div class="empty">Nothing here yet.</div>'}
-  </div><dialog id="liDlg"></dialog>`;
-
-  $('#liForm').addEventListener('submit', safe(async (e) => {
-    e.preventDefault();
-    const f = e.target, fd = new FormData();
-    ['text', 'url', 'date'].forEach((k) => fd.append(k, f[k].value));
-    fd.append('ai', f.ai.checked); if (f.image.files[0]) fd.append('image', f.image.files[0]);
-    const btn = $('button[type=submit]', f); busy(btn, true); btn.textContent = 'Working…';
-    try { const r = await api('/api/admin/linkedin', { method: 'POST', body: fd }); toast(r.linkWarning ? 'Added, but: ' + r.linkWarning : r.warning ? 'Added (basic clean): ' + r.warning.slice(0, 100) : 'Added ✔', r.warning ? 'bad' : 'good'); viewLinkedin(); }
-    finally { busy(btn, false); btn.textContent = 'Add post'; }
-  }));
-  $('#csvGo').addEventListener('click', safe(async (e) => {
-    const f = $('#csv').files[0]; if (!f) return toast('Choose Shares.csv first', 'bad');
-    const fd = new FormData(); fd.append('file', f); busy(e.target, true);
-    try { const r = await api('/api/admin/linkedin/import', { method: 'POST', body: fd }); toast(`Imported ${r.added}, skipped ${r.skipped}` + (r.cleaning ? " — AI is cleaning them in the background" : "")); viewLinkedin(); } finally { busy(e.target, false); }
-  }));
-  $('#aiAll').addEventListener('click', safe(async (e) => {
-    busy(e.target, true); e.target.textContent = 'Working…';
-    try { const r = await api('/api/admin/linkedin/ai-all', { method: 'POST' }); toast(`Cleaned ${r.done}, ${r.remaining} left` + (r.error ? ' — ' + r.error.slice(0, 90) : ''), r.error ? 'bad' : 'good'); viewLinkedin(); }
-    finally { busy(e.target, false); e.target.textContent = '✨ Clean all with AI'; }
-  }));
-  $$('.tabs .pill').forEach((b) => b.addEventListener('click', () => { liFilter = b.dataset.f; viewLinkedin(); }));
-  main.onchange = safe(async (e) => {
-    if (!e.target.classList.contains('li-vis')) return;
-    await api('/api/admin/linkedin/' + e.target.dataset.id, { method: 'PUT', json: { hidden: !e.target.checked } });
-    toast(e.target.checked ? 'Now visible on site' : 'Hidden from site'); viewLinkedin();
-  });
-  main.onclick = safe(async (e) => {
-    const b = e.target.closest('[data-act]'); if (!b) return;
-    const id = b.closest('.item').dataset.id, p = posts.find((x) => x.id === id);
-    if (b.dataset.act === 'del') { if (!confirm('Delete this LinkedIn post from your site?')) return; await api('/api/admin/linkedin/' + id, { method: 'DELETE' }); toast('Deleted'); viewLinkedin(); }
-    if (b.dataset.act === 'chk') {
-      b.disabled = true; b.textContent = 'Checking…';
-      const r = await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { recheck: true } });
-      toast(r.warning || 'Link verified with LinkedIn ✔', r.warning ? 'bad' : 'good'); viewLinkedin();
-    }
-    if (b.dataset.act === 're') {
-      b.disabled = true; b.textContent = 'Working…';
-      const r = await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { reformat: true } });
-      toast(r.warning ? 'Basic clean only: ' + r.warning.slice(0, 100) : 'Re-cleaned with AI ✔', r.warning ? 'bad' : 'good'); viewLinkedin();
-    }
-    if (b.dataset.act === 'edit') {
-      const dlg = $('#liDlg');
-      dlg.innerHTML = `<h2>Edit LinkedIn post</h2>
-      <label>Title</label><input id="lT" value="${esc(p.title)}">
-      <label>Content</label><textarea id="lC" style="min-height:220px">${esc(p.content)}</textarea>
-      <div class="grid2"><div><label>Link</label><input id="lU" value="${esc(p.url)}"></div><div><label>Date</label><input id="lD" type="date" value="${esc((p.date || '').slice(0, 10))}"></div></div>
-      <details style="margin-top:12px"><summary class="muted small">Original text</summary><div class="preview-box">${esc(p.raw)}</div></details>
-      <div class="row between" style="margin-top:20px"><button class="btn" id="lX">Cancel</button><button class="btn primary" id="lS">Save</button></div>`;
-      dlg.showModal();
-      dlg.onclick = safe(async (ev) => {
-        if (ev.target.id === 'lX') dlg.close();
-        if (ev.target.id === 'lS') { const r = await api('/api/admin/linkedin/' + id, { method: 'PUT', json: { title: $('#lT').value, content: $('#lC').value, url: $('#lU').value, date: $('#lD').value } }); dlg.close(); toast(r.warning ? 'Saved, but: ' + r.warning : 'Saved ✔', r.warning ? 'bad' : 'good'); viewLinkedin(); }
-      });
     }
   });
 }
@@ -328,6 +264,9 @@ async function viewProfile() {
     <label>About me — one paragraph per blank line</label><textarea id="pBio" style="min-height:220px">${esc(p.bio.join('\n\n'))}</textarea>
     <div class="grid2"><div><label>Typing roles (one per line)</label><textarea id="pRoles">${esc(p.roles.join('\n'))}</textarea></div><div><label>Skills / interests (one per line)</label><textarea id="pSkills">${esc(p.skills.join('\n'))}</textarea></div></div>
   </div>
+  <div class="card"><h2>Tech stack</h2>
+    <p class="muted small">One category per line: <code>Category: Item, Item, Item</code>. Add <code>@80</code> after an item to show a skill bar (optional), e.g. <code>Python @85</code>. Languages that appear in your GitHub repos become clickable filters on the site.</p>
+    <textarea id="pTech" style="min-height:170px;font-family:var(--mono);font-size:.85rem">${esc((p.tech || []).map((c) => c.name + ': ' + c.items.map((i) => i.name + (i.level ? ' @' + i.level : '')).join(', ')).join('\n'))}</textarea></div>
   <div class="card"><h2>Education</h2>
     <div class="grid2">${f('eSchool', 'College', p.education.school)}${f('eDeg', 'Degree / branch', p.education.degree)}</div>
     <div class="grid2">${f('eYear', 'Year', p.education.year)}${f('ePlace', 'Place', p.education.place)}</div></div>
@@ -336,12 +275,21 @@ async function viewProfile() {
     ${f('pMail', 'Public email (optional — shows an Email button)', p.email, 'you@example.com')}</div>
   <button class="btn primary" id="saveProfile">Save profile</button>`;
   const lines = (id) => $(id).value.split('\n').map((s) => s.trim()).filter(Boolean);
+  // "Languages: Python @85, TypeScript" -> [{ name, items: [{ name, level? }] }]
+  const parseTech = (txt) => txt.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const i = l.indexOf(':'); if (i < 1) return null;
+    const items = l.slice(i + 1).split(',').map((x) => x.trim()).filter(Boolean).map((x) => {
+      const m = x.match(/^(.*?)\s*@\s*(\d{1,3})$/);
+      return m ? { name: m[1].trim(), level: Math.min(100, +m[2]) } : { name: x };
+    }).filter((x) => x.name);
+    return { name: l.slice(0, i).trim(), items };
+  }).filter((c) => c && c.name && c.items.length);
   $('#saveProfile').addEventListener('click', safe(async (e) => {
     busy(e.target, true);
     try {
       await api('/api/admin/profile', { method: 'PUT', json: {
         name: $('#pName').value, headline: $('#pHead').value, location: $('#pLoc').value, status: $('#pStatus').value, intro: $('#pIntro').value,
-        bio: $('#pBio').value.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean), roles: lines('#pRoles'), skills: lines('#pSkills'), email: $('#pMail').value,
+        bio: $('#pBio').value.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean), roles: lines('#pRoles'), skills: lines('#pSkills'), tech: parseTech($('#pTech').value), email: $('#pMail').value,
         education: { school: $('#eSchool').value, degree: $('#eDeg').value, year: $('#eYear').value, place: $('#ePlace').value },
         socials: { github: $('#sGh').value, linkedin: $('#sLi').value, instagram: $('#sIg').value }
       } });

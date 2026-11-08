@@ -13,19 +13,34 @@ const ICONS = {
 };
 const LANG_COLORS = { JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572A5', HTML: '#e34c26', CSS: '#563d7c', Java: '#b07219', 'C++': '#f34b7d', C: '#aaaaaa', 'C#': '#178600', Go: '#00ADD8', Rust: '#dea584', PHP: '#4F5D95', Shell: '#89e051', Kotlin: '#A97BFF', Dart: '#00B4AB', Jupyter: '#DA5B0B', 'Jupyter Notebook': '#DA5B0B', Ruby: '#701516', Swift: '#F05138', SCSS: '#c6538c', Vue: '#41b883' };
 
+window.PF = { profile: null, repos: [], languages: [], posts: [], colors: LANG_COLORS, filterLang: () => 0 };
 async function api(u) { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); }
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const fmtSize = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
 /* safe lightweight text → HTML (escape first, then format) */
 function fmtText(t) {
+  const NUL = String.fromCharCode(0);
   const blocks = String(t || '').replace(/\r/g, '').split(/\n{2,}/);
+  const inline = (raw) => {
+    const anchors = [];
+    // 1) [label](https://url) -> link that reads as part of the sentence
+    let out = esc(raw).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => {
+      anchors.push('<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + label + '</a>');
+      return NUL + (anchors.length - 1) + NUL;
+    });
+    // 2) **bold**
+    out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // 3) bare URLs
+    out = out.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, (m) => {
+      anchors.push('<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + (m.length > 44 ? m.slice(0, 42) + '…' : m) + '</a>');
+      return NUL + (anchors.length - 1) + NUL;
+    });
+    return out.replace(new RegExp(NUL + '(\\d+)' + NUL, 'g'), (m, i) => anchors[i]);
+  };
   return blocks.map((b) => {
     const lines = b.split('\n');
-    const inline = (s) => esc(s)
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m.length > 44 ? m.slice(0, 42) + '…' : m}</a>`);
-    if (lines.every((l) => /^\s*[-•*]\s+/.test(l))) return '<ul>' + lines.map((l) => `<li>${inline(l.replace(/^\s*[-•*]\s+/, ''))}</li>`).join('') + '</ul>';
+    if (lines.every((l) => /^\s*[-•*]\s+/.test(l))) return '<ul>' + lines.map((l) => '<li>' + inline(l.replace(/^\s*[-•*]\s+/, '')) + '</li>').join('') + '</ul>';
     return '<p>' + lines.map(inline).join('<br>') + '</p>';
   }).join('');
 }
@@ -107,8 +122,8 @@ function socialLinks(p, cls) {
 }
 let PROFILE = null;
 function renderProfile(p) {
-  PROFILE = p;
-  if (typeof POSTS !== 'undefined' && POSTS.length) renderPosts(); // refresh LinkedIn cards with the author's name
+  PROFILE = p; PF.profile = p; dispatchEvent(new Event('pf:profile'));
+  if (typeof POSTS !== 'undefined' && POSTS.length) renderPosts();
   const parts = p.name.split(' ');
   $('#heroName').innerHTML = esc(parts[0]) + (parts.length > 1 ? ' <em>' + esc(parts.slice(1).join(' ')) + '</em>' : '');
   document.title = `${p.name} — ${p.headline}`;
@@ -137,7 +152,7 @@ function renderProfile(p) {
 let REPOS = [], langFilter = 'all';
 function renderRepos() {
   const q = $('#repoSearch').value.trim().toLowerCase();
-  const list = REPOS.filter((r) => (langFilter === 'all' || r.language === langFilter) &&
+  const list = REPOS.filter((r) => (langFilter === 'all' || (r.langs || []).includes(langFilter) || r.language === langFilter) &&
     (!q || (r.name + ' ' + r.description + ' ' + r.topics.join(' ')).toLowerCase().includes(q)));
   $('#repos').innerHTML = list.length ? list.map((r) => `
     <article class="card repo">
@@ -161,17 +176,25 @@ function renderRepos() {
 async function loadRepos() {
   try {
     const d = await api('/api/repos');
-    REPOS = d.repos;
+    REPOS = d.repos; PF.repos = REPOS; PF.languages = d.languages || []; dispatchEvent(new Event('pf:repos'));
     if (d.user) {
       $('#repoStat').textContent = REPOS.length || d.user.publicRepos;
       countWhenSeen($('#statRepos'), d.user.publicRepos);
       countWhenSeen($('#statFollowers'), d.user.followers);
     } else $('#repoStat').textContent = REPOS.length;
-    const langs = [...new Set(REPOS.map((r) => r.language).filter(Boolean))];
+    const freq = {};
+    REPOS.forEach((r) => (r.langs && r.langs.length ? r.langs : [r.language]).filter(Boolean).forEach((l) => (freq[l] = (freq[l] || 0) + 1)));
+    const langs = Object.keys(freq).sort((x, y) => freq[y] - freq[x]).slice(0, 8);
     $('#langFilters').innerHTML = langs.length > 1 ? ['all', ...langs].map((l) => `<button class="fbtn ${l === 'all' ? 'on' : ''}" data-l="${esc(l)}">${l === 'all' ? 'All' : esc(l)}</button>`).join('') : '';
     $$('#langFilters .fbtn').forEach((b) => b.addEventListener('click', () => {
       langFilter = b.dataset.l; $$('#langFilters .fbtn').forEach((x) => x.classList.toggle('on', x === b)); renderRepos();
     }));
+    PF.filterLang = (l) => {
+      langFilter = l || 'all';
+      $$('#langFilters .fbtn').forEach((x) => x.classList.toggle('on', x.dataset.l === langFilter));
+      renderRepos();
+      return $$('#repos .repo').length;
+    };
     renderRepos();
     if (!REPOS.length) $('#repos').innerHTML = `<div class="empty">${d.error ? 'Projects will appear here as soon as GitHub responds.' : 'Projects are on the way — stay tuned.'}</div>`;
   } catch {
@@ -181,7 +204,7 @@ async function loadRepos() {
 $('#repoSearch').addEventListener('input', renderRepos);
 
 /* ---------- posts ---------- */
-let POSTS = [], postFilter = 'all';
+let POSTS = [];
 function mediaHtml(p) {
   const imgs = [...(p.attachments || []).filter((a) => a.type === 'image')];
   if (p.image) imgs.unshift({ url: p.image, name: p.title || 'Post image' });
@@ -193,66 +216,31 @@ function mediaHtml(p) {
   return { top: h, files: files.length ? `<div class="files">${files.map((a) => `<a class="file" href="${esc(a.url)}" target="_blank" rel="noopener" download>📎 ${esc(a.name)}<small>${fmtSize(a.size)}</small></a>`).join('')}</div>` : '' };
 }
 function renderPosts() {
-  const list = POSTS.filter((p) => postFilter === 'all' || p.kind === postFilter);
-  if (!list.length) { $('#feed').innerHTML = `<div class="empty" style="column-span:all">Nothing here yet — check back soon.</div>`; return; }
+  const list = POSTS;
+  if (!list.length) { $('#feed').innerHTML = '<div class="empty" style="column-span:all">Nothing here yet — check back soon.</div>'; return; }
   $('#feed').innerHTML = list.map((p) => {
     const m = mediaHtml(p);
     const long = (p.text || '').length > 380;
-    const li = p.kind === 'linkedin';
-    const who = PROFILE ? PROFILE.name : 'Kushal Aggarwal';
-    const sub = PROFILE ? `${PROFILE.education.degree} · ${PROFILE.education.school.replace(/\s*\(.*\)/, '')}` : 'B.Tech student';
-    const head = li
-      ? `<div class="li-author">
-           <img src="/assets/kushal.jpg" alt="" loading="lazy">
-           <div class="li-meta"><b>${esc(who)}</b><span>${esc(sub)}</span><span>${fmtDate(p.date)} · on LinkedIn</span></div>
-           <svg class="li-logo" viewBox="0 0 24 24" aria-label="LinkedIn">${ICONS.linkedin.replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>
-         </div>`
-      : `<div class="post-head">
-           <span class="src own">✦ Update</span>
-           <span>${p.pinned ? '<span class="pin">📌 Pinned · </span>' : ''}${fmtDate(p.date)}</span>
-         </div>`;
-    const actions = li && p.url
-      ? `<div class="post-actions">
-           <a class="btn btn-li btn-sm" href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener noreferrer">${ICONS.linkedin.replace('<svg ', '<svg width="14" height="14" fill="currentColor" ')} View on LinkedIn ↗</a>
-           ${p.embed ? `<button class="btn btn-ghost btn-sm" data-embed="${esc(p.embed)}">Show original post</button>` : ''}
-         </div>`
-      : '';
-    return `<article class="card post ${li ? 'is-li' : ''}">
-      ${m.top}
-      <div class="post-body">
-        ${head}
-        ${p.title ? `<h3>${esc(p.title)}</h3>` : ''}
-        ${p.text ? `<div class="post-text ${long ? 'clamp' : ''}">${fmtText(p.text)}</div>` : ''}
-        ${long ? '<button class="more">Read more ↓</button>' : ''}
-        ${m.files}
-        ${actions}
-        <div class="embed-slot"></div>
-      </div>
-    </article>`;
+    return '<article class="card post">' + m.top +
+      '<div class="post-body">' +
+        '<div class="post-head"><span class="src own">✦ Update</span><span>' + (p.pinned ? '<span class="pin">📌 Pinned · </span>' : '') + fmtDate(p.date) + '</span></div>' +
+        (p.text ? '<div class="post-text ' + (long ? 'clamp' : '') + '">' + fmtText(p.text) + '</div>' : '') +
+        (long ? '<button class="more">Read more ↓</button>' : '') +
+        m.files +
+      '</div></article>';
   }).join('');
   $$('#feed .more').forEach((b) => b.addEventListener('click', () => {
     const t = b.previousElementSibling; const open = t.classList.toggle('clamp'); b.textContent = open ? 'Read more ↓' : 'Show less ↑';
-  }));
-  $$('#feed [data-embed]').forEach((b) => b.addEventListener('click', () => {
-    const slot = b.closest('.post-body').querySelector('.embed-slot');
-    if (slot.firstChild) { slot.innerHTML = ''; b.textContent = 'Show original post'; return; }
-    const src = b.dataset.embed;
-    if (!/^https:\/\/www\.linkedin\.com\/embed\//.test(src)) return;
-    slot.innerHTML = `<div class="embed"><iframe src="${esc(src)}" title="LinkedIn post" loading="lazy" allowfullscreen></iframe></div>`;
-    b.textContent = 'Hide original post';
   }));
   $$('#feed .media img').forEach((i) => i.addEventListener('click', () => { const lb = $('#lightbox'); $('img', lb).src = i.src; lb.hidden = false; }));
 }
 async function loadPosts() {
   try {
-    POSTS = await api('/api/posts');
+    POSTS = await api('/api/posts'); PF.posts = POSTS;
     countWhenSeen($('#statPosts'), POSTS.length);
     renderPosts();
   } catch { $('#feed').innerHTML = '<div class="empty" style="column-span:all">Couldn\'t load posts.</div>'; }
 }
-$$('#postTabs .tab').forEach((t) => t.addEventListener('click', () => {
-  postFilter = t.dataset.f; $$('#postTabs .tab').forEach((x) => x.classList.toggle('on', x === t)); renderPosts();
-}));
 $('#lightbox').addEventListener('click', () => ($('#lightbox').hidden = true));
 addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#lightbox').hidden = true; });
 

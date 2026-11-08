@@ -47,7 +47,14 @@ const DEFAULT_DB = {
       year: '2nd Year',
       place: 'Bengaluru, Karnataka'
     },
-    skills: ['Web Development', 'JavaScript', 'Python', 'C / C++', 'Data Structures', 'Git & GitHub', 'Problem Solving', 'UI Design', 'AI / ML Curiosity'],
+    skills: ['Python', 'TypeScript', 'JavaScript', 'HTML & CSS', 'Git & GitHub', 'Web Development', 'AI / ML', 'Vercel'],
+    // Edit freely in the admin panel (Profile → Tech stack). level is optional (0-100).
+    tech: [
+      { name: 'Languages', items: [{ name: 'Python' }, { name: 'TypeScript' }, { name: 'JavaScript' }, { name: 'HTML' }, { name: 'CSS' }] },
+      { name: 'Web & Deployment', items: [{ name: 'Web Development' }, { name: 'Responsive Design' }, { name: 'Vercel' }] },
+      { name: 'Tools', items: [{ name: 'Git' }, { name: 'GitHub' }] },
+      { name: 'Exploring', items: [{ name: 'AI / Machine Learning' }, { name: 'Data Structures & Algorithms' }, { name: 'Backend Development' }] }
+    ],
     email: '',
     socials: {
       github: 'https://github.com/kushal287',
@@ -56,7 +63,6 @@ const DEFAULT_DB = {
     }
   },
   posts: [],
-  linkedin: [],
   repos: {},
   resume: { items: [], activeId: null }
 };
@@ -66,6 +72,8 @@ function loadDb() {
   try {
     const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
     db = { ...structuredClone(DEFAULT_DB), ...raw, profile: { ...structuredClone(DEFAULT_DB.profile), ...(raw.profile || {}) } };
+    const OLD_SKILLS = JSON.stringify(['Web Development', 'JavaScript', 'Python', 'C / C++', 'Data Structures', 'Git & GitHub', 'Problem Solving', 'UI Design', 'AI / ML Curiosity']);
+    if (JSON.stringify(db.profile.skills) === OLD_SKILLS) db.profile.skills = [...DEFAULT_DB.profile.skills];
   } catch {
     db = structuredClone(DEFAULT_DB);
     saveDb();
@@ -77,6 +85,7 @@ function saveDb() {
   fs.renameSync(tmp, DB_FILE);
 }
 loadDb();
+delete db.linkedin; // LinkedIn integration was removed
 
 const uid = () => crypto.randomBytes(8).toString('hex');
 const now = () => new Date().toISOString();
@@ -153,13 +162,13 @@ function localFormat(text) {
 }
 
 const AI_SYSTEM = [
-  'You are the editor of a personal portfolio website (author: Kushal Aggarwal, a B.Tech student). You receive a raw LinkedIn post.',
+  'You are the editor of a personal portfolio website (author: Kushal Aggarwal, a B.Tech student). You receive a rough draft of a short post.',
   'Step 1 — analyse it: find the main message, the facts (names, events, numbers, tools, outcomes) and the tone.',
   'Step 2 — rewrite it so it reads naturally as a standalone entry on a website for ANY visitor, not as a social-media post.',
   'Rules:',
   '1. Remove every hashtag. If a hashtag is part of a sentence, keep the plain word without "#"; otherwise drop it.',
   '2. Remove @mentions/handles (keep the plain person or company name if it matters), emojis, and decorative symbols.',
-  '3. Remove LinkedIn-specific and engagement-bait wording: "like / share / repost / follow me", "comment below", "link in comments", "DM me", "what do you think?", "agree?", "thanks for reading", "my LinkedIn family/connections" (say "everyone" or "my network" if needed).',
+  '3. Remove social-media and engagement-bait wording: "like / share / repost / follow me", "comment below", "link in comments", "DM me", "what do you think?", "agree?", "thanks for reading", "my LinkedIn family/connections" (say "everyone" if needed).',
   '4. Generalise platform- and time-specific phrasing: replace "today / yesterday / this week / just now / recently" and "this post" with neutral wording, because the website already shows the date.',
   '5. Keep the author\'s first-person voice and EVERY fact. NEVER add facts, names, numbers, links or claims that are not in the original. Do not exaggerate.',
   '6. Fix spelling, grammar and spacing. Use short paragraphs separated by a blank line; keep lists as lines starting with "- ". No markdown headings, no bold.',
@@ -219,23 +228,6 @@ async function aiFormat(text) {
   return { ...fallback, error: errors.length ? errors.join(' | ') : 'No AI provider configured' };
 }
 
-// After a bulk import, clean the posts one by one in the background (gentle on free-tier rate limits).
-let cleaning = false;
-async function backgroundClean() {
-  if (cleaning) return;
-  cleaning = true;
-  try {
-    for (;;) {
-      const p = db.linkedin.find((x) => !x.aiFormatted);
-      if (!p) break;
-      const f = await aiFormat(p.raw || p.content);
-      if (f.source !== 'ai') break; // no AI reachable — stop; admin can retry from the panel
-      p.title = f.title; p.content = f.content; p.aiFormatted = true; saveDb();
-      await new Promise((r) => setTimeout(r, 6000));
-    }
-  } finally { cleaning = false; }
-}
-
 /* ------------------------------------------------------------------ *
  * GitHub (public API, cached)
  * ------------------------------------------------------------------ */
@@ -247,6 +239,15 @@ async function ghFetch(url) {
   if (!r.ok) throw new Error(`GitHub ${r.status}`);
   return r.json();
 }
+const langCache = new Map(); // repo name -> { pushed, langs: { Language: bytes } }
+async function fillLanguages(repos) {
+  const want = repos.filter((r) => !r.fork || (db.repos[r.name] && db.repos[r.name].hidden === false)).slice(0, 40);
+  await Promise.all(want.map(async (r) => {
+    const c = langCache.get(r.name);
+    if (c && c.pushed === r.pushed_at) return;
+    try { langCache.set(r.name, { pushed: r.pushed_at, langs: await ghFetch(r.languages_url) }); } catch { /* keep old value */ }
+  }));
+}
 async function getGithub(force = false) {
   if (!force && Date.now() - ghCache.at < 10 * 60 * 1000 && ghCache.repos.length) return ghCache;
   try {
@@ -254,6 +255,7 @@ async function getGithub(force = false) {
       ghFetch(`https://api.github.com/users/${GITHUB_USER}`),
       ghFetch(`https://api.github.com/users/${GITHUB_USER}/repos?per_page=100&sort=updated`)
     ]);
+    await fillLanguages(repos);
     ghCache = { at: Date.now(), user, repos, error: null };
   } catch (e) {
     ghCache = { ...ghCache, at: ghCache.repos.length ? ghCache.at : 0, error: e.message };
@@ -272,6 +274,8 @@ function repoView(r) {
     description: cfg.description || r.description || '',
     originalDescription: r.description || '',
     language: r.language || '',
+    langBytes: (langCache.get(r.name) || {}).langs || {},
+    langs: Object.entries((langCache.get(r.name) || {}).langs || {}).sort((a, b) => b[1] - a[1]).map((x) => x[0]),
     stars: r.stargazers_count,
     forks: r.forks_count,
     fork: !!r.fork,
@@ -306,8 +310,6 @@ const mkUpload = (sub, allowed, maxMb, maxFiles) =>
   });
 const postUpload = mkUpload('posts', POST_EXT, 50, 8);
 const resumeUpload = mkUpload('resume', RESUME_EXT, 10, 1);
-const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
-const imgUpload = mkUpload('posts', IMG_EXT, 10, 1);
 
 function attachmentFrom(f, sub) {
   const ext = path.extname(f.filename).toLowerCase();
@@ -322,27 +324,6 @@ function deleteUpload(url) {
   if (!url || !url.startsWith('/uploads/')) return;
   const p = path.normalize(path.join(ROOT, url));
   if (p.startsWith(UPLOAD_DIR + path.sep)) fs.unlink(p, () => {});
-}
-
-/* ------------------------------------------------------------------ *
- * LinkedIn CSV import (LinkedIn "Get a copy of your data" → Shares.csv)
- * ------------------------------------------------------------------ */
-function parseCsv(text) {
-  const rows = [];
-  let row = [], cur = '', q = false;
-  text = text.replace(/^﻿/, '');
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) {
-      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
-      else cur += c;
-    } else if (c === '"') q = true;
-    else if (c === ',') { row.push(cur); cur = ''; }
-    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
-    else if (c !== '\r') cur += c;
-  }
-  if (cur || row.length) { row.push(cur); rows.push(row); }
-  return rows.filter((r) => r.some((x) => x.trim()));
 }
 
 /* ------------------------------------------------------------------ *
@@ -368,71 +349,46 @@ app.get('/api/repos', async (req, res) => {
   const gh = await getGithub();
   const repos = gh.repos.map(repoView).filter((r) => !r.hidden)
     .sort((a, b) => (b.pinned - a.pinned) || new Date(b.updatedAt) - new Date(a.updatedAt));
+  const bytes = {};
+  for (const r of repos) for (const [l, n] of Object.entries(r.langBytes || {})) bytes[l] = (bytes[l] || 0) + n;
+  const total = Object.values(bytes).reduce((a, b) => a + b, 0) || 1;
+  let languages = Object.entries(bytes).map(([name, n]) => ({ name, pct: (n / total) * 100 })).sort((a, b) => b.pct - a.pct);
+  const small = languages.filter((l) => l.pct < 1.5).reduce((a, l) => a + l.pct, 0);
+  languages = languages.filter((l) => l.pct >= 1.5);
+  if (small > 0) languages.push({ name: 'Other', pct: small });
   res.json({
-    repos,
+    repos: repos.map((r) => ({ ...r, langBytes: undefined })),
+    languages,
     user: gh.user && { followers: gh.user.followers, publicRepos: gh.user.public_repos, avatar: gh.user.avatar_url, url: gh.user.html_url },
     error: repos.length ? null : gh.error
   });
 });
 
-// LinkedIn's official embed URL for a public post link (shows the original post exactly as on LinkedIn)
-const LI_HOST = /^https?:\/\/([\w-]+\.)*linkedin\.com\//i;
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
-// Accepts a normal post link, a feed/update link, an embed link, or the whole "Embed this post" <iframe> code.
-function parseLinkedinInput(input) {
-  let s = String(input || '').trim();
-  const iframe = s.match(/src=["']([^"']+)["']/i);
-  if (iframe) s = iframe[1].trim();
-  if (!s) return { url: '', embed: '' };
-  if (!LI_HOST.test(s)) return { error: 'That is not a linkedin.com link' };
-  const m = s.match(/(activity|ugcPost|share)[:-](\d{15,})/);
-  const embed = m ? `https://www.linkedin.com/embed/feed/update/urn:li:${m[1]}:${m[2]}` : '';
-  // an embed link is not a page people can open, so visitors get the normal permalink instead
-  const url = m && /\/embed\//.test(s) ? `https://www.linkedin.com/feed/update/urn:li:${m[1]}:${m[2]}/` : s;
-  return { url: url.slice(0, 500), embed };
-}
-// LinkedIn answers 404 for an embed that does not exist / is not public.
-async function checkEmbed(embed) {
-  if (!embed) return 'none';
-  try {
-    const r = await fetch(embed, { headers: { 'User-Agent': BROWSER_UA }, redirect: 'follow', signal: AbortSignal.timeout(8000) });
-    r.body?.cancel?.();
-    if (r.status === 404 || r.status === 410) return 'bad';
-    return r.ok ? 'ok' : 'unknown';
-  } catch { return 'unknown'; }
-}
-// Stores the link on a post and verifies it. Returns { error } or { warning }.
-async function setLinkedinLink(p, input) {
-  const r = parseLinkedinInput(input);
-  if (r.error) return { error: r.error };
-  p.url = r.url; p.embed = r.embed; p.embedStatus = await checkEmbed(r.embed);
-  if (p.embedStatus === 'bad') return { warning: "LinkedIn can't find a public post at this link, so the “Show original post” button stays hidden. On LinkedIn open the post → ⋯ menu → Copy link to post (the post must be public), then edit this post and paste the link again." };
-  if (r.url && p.embedStatus === 'none') return { warning: 'This link has no post ID, so only the “View on LinkedIn” button is shown. Use the post’s own link (⋯ → Copy link to post) to also show the original post.' };
-  return { warning: null };
-}
-// verify links of imported posts one by one in the background
-let checking = false;
-async function backgroundCheckEmbeds() {
-  if (checking) return;
-  checking = true;
-  try {
-    for (const p of db.linkedin) {
-      if (!p.url || p.embedStatus) continue;
-      const r = parseLinkedinInput(p.url);
-      p.embed = r.embed || ''; p.embedStatus = await checkEmbed(p.embed); saveDb();
-      await new Promise((res) => setTimeout(res, 1500));
-    }
-  } finally { checking = false; }
-}
+let actCache = { at: 0, items: [] };
+// Latest commits across the repos that are visible on the site (GitHub's events feed no longer carries commit messages).
+app.get('/api/github/activity', async (req, res) => {
+  const gh = await getGithub();
+  const views = gh.repos.map(repoView);
+  if (Date.now() - actCache.at > 10 * 60 * 1000) {
+    const pick = views.filter((r) => !r.hidden).sort((x, y) => new Date(y.updatedAt) - new Date(x.updatedAt)).slice(0, 6);
+    const lists = await Promise.all(pick.map(async (r) => {
+      try {
+        const cs = await ghFetch(`https://api.github.com/repos/${r.fullName}/commits?per_page=3`);
+        return cs.map((c) => ({ repo: r.name, message: String((c.commit && c.commit.message) || '').split('\n')[0].slice(0, 110), sha: String(c.sha || '').slice(0, 7), url: c.html_url, date: c.commit && c.commit.author && c.commit.author.date }));
+      } catch { return null; }
+    }));
+    if (lists.some(Boolean) || !actCache.items.length) {
+      actCache = { at: Date.now(), items: lists.flat().filter(Boolean).sort((x, y) => new Date(y.date) - new Date(x.date)) };
+    } else actCache.at = Date.now() - 9 * 60 * 1000; // all calls failed: keep old data, retry in a minute
+  }
+  const hidden = new Set(views.filter((r) => r.hidden).map((r) => r.name));
+  res.json(actCache.items.filter((i) => !hidden.has(i.repo)).slice(0, 8));
+});
+
 function publicFeed() {
-  const own = db.posts.filter((p) => !p.hidden).map((p) => ({
+  return db.posts.filter((p) => !p.hidden).map((p) => ({
     id: p.id, kind: 'own', text: p.text, attachments: p.attachments, pinned: !!p.pinned, date: p.createdAt
-  }));
-  const li = db.linkedin.filter((p) => !p.hidden).map((p) => ({
-    // hide the title when it is just the first line of the text (avoids showing the same words twice)
-    id: p.id, kind: 'linkedin', title: p.title && !p.content.startsWith(p.title.replace(/…$/, '')) ? p.title : '', text: p.content, url: p.url, embed: p.embedStatus === 'bad' ? '' : (p.embed || parseLinkedinInput(p.url).embed || ''), image: p.image || '', attachments: [], pinned: false, date: p.date
-  }));
-  return [...own, ...li].sort((a, b) => (b.pinned - a.pinned) || new Date(b.date) - new Date(a.date));
+  })).sort((a, b) => (b.pinned - a.pinned) || new Date(b.date) - new Date(a.date));
 }
 app.get('/api/posts', (req, res) => res.json(publicFeed()));
 
@@ -486,14 +442,10 @@ admin.get('/overview', async (req, res) => {
   const repos = gh.repos.map(repoView);
   res.json({
     posts: db.posts.length,
-    linkedin: db.linkedin.length,
-    linkedinHidden: db.linkedin.filter((p) => p.hidden).length,
     repos: repos.length,
     reposVisible: repos.filter((r) => !r.hidden).length,
     resume: db.resume.items.length,
     ai: aiProviders().map((p) => p.name),
-    cleanPending: db.linkedin.filter((p) => !p.aiFormatted).length,
-    cleaning,
     githubError: gh.error
   });
 });
@@ -507,6 +459,15 @@ admin.put('/profile', (req, res) => {
   }
   if (Array.isArray(b.roles)) p.roles = b.roles.map((x) => str(x, 60)).filter(Boolean).slice(0, 12);
   if (Array.isArray(b.skills)) p.skills = b.skills.map((x) => str(x, 40)).filter(Boolean).slice(0, 40);
+  if (Array.isArray(b.tech)) {
+    p.tech = b.tech.slice(0, 12).map((c) => ({
+      name: str(c && c.name, 40) || '',
+      items: Array.isArray(c && c.items) ? c.items.slice(0, 30).map((i) => {
+        const name = str(i && i.name, 40); const lv = Number(i && i.level);
+        return name ? (lv > 0 && lv <= 100 ? { name, level: Math.round(lv) } : { name }) : null;
+      }).filter(Boolean) : []
+    })).filter((c) => c.name && c.items.length);
+  }
   if (Array.isArray(b.bio)) p.bio = b.bio.map((x) => str(x, 1500)).filter(Boolean).slice(0, 8);
   if (b.education && typeof b.education === 'object') {
     for (const k of ['school', 'degree', 'year', 'place']) { const v = str(b.education[k], 160); if (v !== undefined) p.education[k] = v; }
@@ -551,95 +512,11 @@ admin.delete('/posts/:id', (req, res) => {
   db.posts.splice(i, 1); saveDb(); res.json({ ok: true });
 });
 
-/* LinkedIn */
-admin.get('/linkedin', (req, res) => res.json(db.linkedin.slice().sort((a, b) => new Date(b.date) - new Date(a.date))));
+/* AI tidy for the post composer */
 admin.post('/ai/format', async (req, res) => {
   const text = String((req.body && req.body.text) || '').trim();
   if (!text) return res.status(400).json({ error: 'No text' });
   res.json(await aiFormat(text));
-});
-admin.post('/linkedin', imgUpload.single('image'), async (req, res) => {
-  const raw = String(req.body.text || '').trim();
-  if (!raw) return res.status(400).json({ error: 'Paste the post text' });
-  const link = parseLinkedinInput(req.body.url);
-  if (link.error) return res.status(400).json({ error: link.error });
-  const useAi = req.body.ai !== 'false';
-  const f = useAi ? await aiFormat(raw) : localFormat(raw);
-  const date = req.body.date ? new Date(req.body.date) : new Date();
-  const p = {
-    id: uid(), raw: raw.slice(0, 10000), title: f.title, content: f.content, url: '',
-    date: isNaN(date) ? now() : date.toISOString(),
-    image: req.file ? `/uploads/posts/${req.file.filename}` : '',
-    hidden: false, aiFormatted: f.source === 'ai', createdAt: now()
-  };
-  const lk = await setLinkedinLink(p, req.body.url);
-  db.linkedin.push(p); saveDb();
-  res.json({ post: p, warning: [f.error, lk.warning].filter(Boolean).join(' ') || null, linkWarning: lk.warning || null });
-});
-admin.post('/linkedin/import', csvUpload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Upload Shares.csv from your LinkedIn data export' });
-  const rows = parseCsv(req.file.buffer.toString('utf8'));
-  if (rows.length < 2) return res.status(400).json({ error: 'CSV looks empty' });
-  const head = rows[0].map((h) => h.trim().toLowerCase());
-  const col = (n) => head.indexOf(n);
-  const iDate = col('date'), iLink = col('sharelink'), iText = col('sharecommentary'), iMedia = col('mediaurl');
-  if (iText < 0) return res.status(400).json({ error: 'Not a LinkedIn Shares.csv (no ShareCommentary column)' });
-  const known = new Set(db.linkedin.map((p) => p.url).filter(Boolean));
-  let added = 0, skipped = 0;
-  for (const r of rows.slice(1)) {
-    const text = (r[iText] || '').trim();
-    const link = (iLink >= 0 ? r[iLink] : '').trim();
-    if (!text || (link && known.has(link))) { skipped++; continue; }
-    const f = localFormat(text);
-    const d = iDate >= 0 ? new Date(String(r[iDate]).replace(' ', 'T') + 'Z') : new Date();
-    db.linkedin.push({
-      id: uid(), raw: text, title: f.title, content: f.content, url: link,
-      date: isNaN(d) ? now() : d.toISOString(),
-      image: '', mediaUrl: iMedia >= 0 ? r[iMedia] : '', hidden: false, aiFormatted: false, createdAt: now()
-    });
-    if (link) known.add(link);
-    added++;
-  }
-  saveDb();
-  if (added) { backgroundClean(); backgroundCheckEmbeds(); }
-  res.json({ added, skipped, cleaning: added > 0 });
-});
-admin.post('/linkedin/ai-all', async (req, res) => {
-  const todo = db.linkedin.filter((p) => !p.aiFormatted).slice(0, 15);
-  let done = 0, error = null;
-  for (const p of todo) {
-    const f = await aiFormat(p.raw || p.content);
-    if (f.source !== 'ai') { error = f.error; break; }
-    p.title = f.title; p.content = f.content; p.aiFormatted = true; done++;
-  }
-  saveDb();
-  res.json({ done, remaining: db.linkedin.filter((p) => !p.aiFormatted).length, error });
-});
-admin.put('/linkedin/:id', async (req, res) => {
-  const p = db.linkedin.find((x) => x.id === req.params.id);
-  if (!p) return res.status(404).json({ error: 'Not found' });
-  const b = req.body || {};
-  let warning = null;
-  if (b.reformat) {
-    const f = await aiFormat(p.raw || p.content);
-    p.title = f.title; p.content = f.content; p.aiFormatted = f.source === 'ai'; warning = f.error || null;
-  }
-  if (typeof b.title === 'string') p.title = b.title.trim().slice(0, 140);
-  if (typeof b.content === 'string') p.content = b.content.trim().slice(0, 10000);
-  if (typeof b.hidden === 'boolean') p.hidden = b.hidden;
-  if (typeof b.url === 'string' || b.recheck) {
-    const lk = await setLinkedinLink(p, typeof b.url === 'string' ? b.url : p.url);
-    if (lk.error) return res.status(400).json({ error: lk.error });
-    warning = [warning, lk.warning].filter(Boolean).join(' ') || null;
-  }
-  if (b.date) { const d = new Date(b.date); if (!isNaN(d)) p.date = d.toISOString(); }
-  saveDb(); res.json({ post: p, warning });
-});
-admin.delete('/linkedin/:id', (req, res) => {
-  const i = db.linkedin.findIndex((x) => x.id === req.params.id);
-  if (i < 0) return res.status(404).json({ error: 'Not found' });
-  deleteUpload(db.linkedin[i].image);
-  db.linkedin.splice(i, 1); saveDb(); res.json({ ok: true });
 });
 
 /* GitHub repos */
@@ -690,7 +567,7 @@ admin.delete('/resume/:id', (req, res) => {
 app.use('/api/admin', admin);
 
 /* ---------- static ---------- */
-// Only post attachments / LinkedIn images are public; resumes go through /resume/* routes.
+// Only post attachments are public; resumes go through /resume/* routes.
 app.use('/uploads/posts', express.static(path.join(UPLOAD_DIR, 'posts'), { maxAge: '7d', index: false, dotfiles: 'deny' }));
 
 // Hidden admin panel: no link anywhere on the site, only reachable by typing the URL.

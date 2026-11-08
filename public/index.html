@@ -25,6 +25,7 @@
     <a href="#home" class="brand" aria-label="Home"><span class="brand-dot">K</span><span class="brand-name">Kushal</span></a>
     <div class="nav-links" id="navLinks">
       <a href="#about">About</a>
+      <a href="#stack">Stack</a>
       <a href="#projects">Projects</a>
       <a href="#posts">Posts</a>
       <a href="#resume">Resume</a>
@@ -104,10 +105,37 @@
     </div>
   </section>
 
+  <!-- TECH STACK -->
+  <section class="section" id="stack">
+    <div class="wrap">
+      <div class="eyebrow reveal">02 — Tech stack</div>
+      <h2 class="h2 reveal">Languages &amp; tools<br><em>I work with.</em></h2>
+      <p class="muted lead reveal">Everything here is clickable — pick a technology and my projects filter to match.</p>
+      <div class="stack-grid">
+        <article class="card lang-card reveal">
+          <div class="card-tag">Language mix · measured from my GitHub code</div>
+          <div class="lang-bar" id="langBar" aria-label="Language breakdown"></div>
+          <div class="lang-legend" id="langLegend"></div>
+        </article>
+        <article class="card stack-card reveal">
+          <div class="card-tag">Explore my stack</div>
+          <div class="filters" id="stackTabs"></div>
+          <div class="stack-items" id="stackItems"></div>
+          <p class="stack-hint muted" id="stackHint" aria-live="polite">Tip: click a technology to see the projects that use it.</p>
+        </article>
+        <article class="card git-card reveal">
+          <div class="card-tag"><span class="live"></span> Live from GitHub</div>
+          <div class="git-cmd"><span class="prompt">$</span> git log --oneline<span class="caret"></span></div>
+          <div class="git-log" id="gitLog"><div class="muted small">Loading latest commits…</div></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
   <!-- PROJECTS -->
   <section class="section" id="projects">
     <div class="wrap">
-      <div class="eyebrow reveal">02 — Projects</div>
+      <div class="eyebrow reveal">03 — Projects</div>
       <div class="head-row">
         <h2 class="h2 reveal">Things I've <em>built.</em></h2>
         <div class="tools reveal">
@@ -124,16 +152,11 @@
   <!-- POSTS -->
   <section class="section" id="posts">
     <div class="wrap">
-      <div class="eyebrow reveal">03 — My Posts</div>
+      <div class="eyebrow reveal">04 — My Posts</div>
       <div class="head-row">
         <h2 class="h2 reveal">Thoughts, updates &amp; <em>wins.</em></h2>
-        <div class="tabs reveal" id="postTabs" role="tablist">
-          <button class="tab on" data-f="all">All</button>
-          <button class="tab" data-f="own">Updates</button>
-          <button class="tab" data-f="linkedin">LinkedIn</button>
-        </div>
       </div>
-      <p class="muted lead reveal">What I'm working on and learning — including my LinkedIn posts, cleaned up and brought home.</p>
+      <p class="muted lead reveal">What I'm building, learning and thinking about — straight from me.</p>
       <div class="feed" id="feed"><div class="skeleton tall"></div></div>
     </div>
   </section>
@@ -141,7 +164,7 @@
   <!-- RESUME -->
   <section class="section" id="resume">
     <div class="wrap">
-      <div class="eyebrow reveal">04 — Resume</div>
+      <div class="eyebrow reveal">05 — Resume</div>
       <h2 class="h2 reveal">The <em>short</em> version.</h2>
       <div class="resume card reveal" id="resumeCard">
         <div class="resume-info">
@@ -158,9 +181,19 @@
   <!-- CONTACT -->
   <section class="section contact" id="contact">
     <div class="wrap">
-      <div class="eyebrow reveal">05 — Contact</div>
+      <div class="eyebrow reveal">06 — Contact</div>
       <h2 class="mega reveal">Let's build<br><em>something great.</em></h2>
       <p class="muted lead center-lead reveal">Got an idea, an internship, or just want to say hi? The fastest way to reach me is a message.</p>
+      <div class="terminal reveal" id="term">
+        <div class="term-bar"><i></i><i></i><i></i><span>kushal@portfolio: ~</span></div>
+        <div class="term-body" id="termBody">
+          <div id="termOut" aria-live="polite"></div>
+          <form class="term-line" id="termForm" autocomplete="off"><span class="prompt">$</span><input id="termIn" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Terminal command"></form>
+        </div>
+        <div class="term-hints" id="termHints"><span>Try:</span>
+          <button type="button">help</button><button type="button">whoami</button><button type="button">stack</button><button type="button">langs</button><button type="button">projects</button><button type="button">neofetch</button>
+        </div>
+      </div>
       <div class="contact-links reveal" id="contactLinks"></div>
     </div>
   </section>
@@ -176,5 +209,6 @@
 <div class="lightbox" id="lightbox" hidden><button class="lb-close" aria-label="Close">✕</button><img alt=""></div>
 <script src="/js/bg.js"></script>
 <script src="/js/app.js"></script>
+<script src="/js/extras.js"></script>
 </body>
 </html>
