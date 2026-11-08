@@ -255,6 +255,7 @@ async function viewResume() {
 /* ---------- profile ---------- */
 async function viewProfile() {
   const p = await fetch('/api/profile').then((r) => r.json());
+  const o = await api('/api/admin/overview').catch(() => ({}));
   const f = (id, label, v, ph = '') => `<div><label>${label}</label><input id="${id}" value="${esc(v)}" placeholder="${esc(ph)}"></div>`;
   main.innerHTML = head('Profile', 'Edit the text shown on your home page.') + `
   <div class="card">
@@ -273,6 +274,18 @@ async function viewProfile() {
   <div class="card"><h2>Social links</h2>
     ${f('sGh', 'GitHub', p.socials.github)}${f('sLi', 'LinkedIn', p.socials.linkedin)}${f('sIg', 'Instagram', p.socials.instagram)}
     ${f('pMail', 'Public email (optional — shows an Email button)', p.email, 'you@example.com')}</div>
+  <div class="card"><h2>Numbers on the home page</h2>
+    <p class="muted small">Every number here is editable. A number appears on the site only when it is above 0 (or is text like “5+”). The first three are read automatically from your site and GitHub — turn one off to hide it, or type your own value to replace the real one. LinkedIn and Instagram don't let websites read follower counts, so type those yourself.</p>
+    <label>Automatic numbers — show / hide, or type your own value instead</label>
+    ${[['sProj', 'oProj', 'projects', 'Projects', o.reposVisible], ['sPosts', 'oPosts', 'posts', 'Posts shared', o.postsLive], ['sGhF', 'oGhF', 'githubFollowers', 'GitHub followers', o.githubFollowers]].map(([id, oid, k, l, n]) => `<div class="stat-edit"><label class="row" style="margin:0;text-transform:none;font-family:inherit;font-size:.9rem"><span class="switch"><input type="checkbox" id="${id}" ${(p.statsShow || {})[k] === false ? '' : 'checked'}><i></i></span> ${l}</label><input id="${oid}" value="${esc((p.statsOverride || {})[k] || '')}" placeholder="Real value: ${n ?? 0} — type to replace"></div>`).join('')}
+    <div class="grid2">${f('fLi', 'LinkedIn followers (type it)', (p.followers && p.followers.linkedin) || 0)}${f('fIg', 'Instagram followers (type it)', (p.followers && p.followers.instagram) || 0)}</div>
+    <label>Your own numbers — one per line: Label: value</label>
+    <textarea id="pCustom" placeholder="Hackathons: 3&#10;Certifications: 2&#10;Years coding: 5+">${esc((p.customStats || []).map((c) => c.label + ': ' + c.value).join('\n'))}</textarea>
+    <p class="muted small" style="margin-top:6px">Numbers count up on the page; text like “5+” is shown exactly as written. Up to 6.</p></div>
+  <div class="card"><h2>Studio link (KDS)</h2>
+    <p class="muted small">Your studio's logo and a link to its website appear on the home page (navigation bar, About section and footer). Leave the address empty to hide the link — the logo stays in the footer.</p>
+    <div class="grid2">${f('stName', 'Studio name', (p.studio && p.studio.name) || 'Kushal Developer Studios')}${f('stUrl', 'Studio website address', (p.studio && p.studio.url) || '', 'https://your-studio-website.com')}</div>
+    <p class="muted small" style="margin-top:8px">Logo: it uses the built-in KDS logo. To use your original image, save it as <code>public/assets/kds-logo.png</code> in the project (it replaces the built-in one automatically).</p></div>
   <button class="btn primary" id="saveProfile">Save profile</button>`;
   const lines = (id) => $(id).value.split('\n').map((s) => s.trim()).filter(Boolean);
   // "Languages: Python @85, TypeScript" -> [{ name, items: [{ name, level? }] }]
@@ -289,7 +302,11 @@ async function viewProfile() {
     try {
       await api('/api/admin/profile', { method: 'PUT', json: {
         name: $('#pName').value, headline: $('#pHead').value, location: $('#pLoc').value, status: $('#pStatus').value, intro: $('#pIntro').value,
-        bio: $('#pBio').value.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean), roles: lines('#pRoles'), skills: lines('#pSkills'), tech: parseTech($('#pTech').value), email: $('#pMail').value,
+        bio: $('#pBio').value.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean), roles: lines('#pRoles'), skills: lines('#pSkills'), tech: parseTech($('#pTech').value), followers: { linkedin: Number($('#fLi').value) || 0, instagram: Number($('#fIg').value) || 0 },
+        studio: { name: $('#stName').value, url: $('#stUrl').value },
+        statsShow: { projects: $('#sProj').checked, posts: $('#sPosts').checked, githubFollowers: $('#sGhF').checked },
+        statsOverride: { projects: $('#oProj').value, posts: $('#oPosts').value, githubFollowers: $('#oGhF').value },
+        customStats: lines('#pCustom').map((l) => { const i = l.indexOf(':'); return i < 1 ? null : { label: l.slice(0, i).trim(), value: l.slice(i + 1).trim() }; }).filter(Boolean), email: $('#pMail').value,
         education: { school: $('#eSchool').value, degree: $('#eDeg').value, year: $('#eYear').value, place: $('#ePlace').value },
         socials: { github: $('#sGh').value, linkedin: $('#sLi').value, instagram: $('#sIg').value }
       } });

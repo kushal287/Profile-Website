@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 224" role="img" aria-label="KDS — Kushal Developer Studios">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f9dd8a"/><stop offset=".45" stop-color="#d9a21b"/><stop offset="1" stop-color="#9a6508"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7d57a"/><stop offset=".5" stop-color="#cf9712"/><stop offset="1" stop-color="#8a5a06"/>
+    </linearGradient>
+    <linearGradient id="s" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#b9b9bd"/><stop offset="1" stop-color="#7d7d83"/>
+    </linearGradient>
+    <linearGradient id="s2" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9d9dc"/><stop offset=".5" stop-color="#8d8d93"/><stop offset="1" stop-color="#f1f1f2"/>
+    </linearGradient>
+  </defs>
+  <!-- K : gold stem + upper arm, silver lower leg -->
+  <polygon points="16,12 196,12 16,206" fill="url(#g)"/>
+  <polygon points="16,206 62,150 80,170" fill="#7a4d05" opacity=".28"/>
+  <polygon points="96,126 124,98 222,196 206,210 172,210" fill="url(#s)" stroke="#0f0f14" stroke-opacity=".55" stroke-width="3" stroke-linejoin="round"/>
+  <!-- D : silver ring with a dark inner edge -->
+  <path d="M196 12 C318 12 336 108 300 160 C282 190 250 208 212 206" fill="none" stroke="url(#s2)" stroke-width="40"/>
+  <path d="M186 28 C296 28 312 106 282 152 C268 176 244 190 212 190" fill="none" stroke="#1a1a1f" stroke-opacity=".78" stroke-width="12"/>
+  <!-- S : gold with a leaf-like top tail -->
+  <path d="M412 12 C348 16 296 46 316 94 C334 134 404 126 404 168 C404 200 350 214 296 190" fill="none" stroke="url(#g2)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M412 10 C392 4 362 8 340 22 C372 20 398 22 412 10Z" fill="url(#g2)"/>
+</svg>

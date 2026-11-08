@@ -21,13 +21,18 @@ const langOf = (name) => {
 const repoCount = (lang) => PF.repos.filter((r) => (r.langs || []).includes(lang)).length;
 const goProjects = () => $('#projects').scrollIntoView({ behavior: 'smooth' });
 
+// the Stack section disappears when none of its cards has anything to show
+function syncStack() { PF.setSection('stack', $$('#stack .stack-grid > article').some((a) => !a.hidden)); }
+
 /* ------------------------------------------------------------------ language mix */
 function renderLangs() {
   const bar = $('#langBar'), legend = $('#langLegend');
   if (!bar) return;
   const langs = PF.languages || [];
-  if (!langs.length) { bar.style.display = 'none'; legend.innerHTML = '<span class="muted small">Language data will appear once GitHub responds.</span>'; return; }
-  bar.style.display = '';
+  const card = bar.closest('.lang-card');
+  card.hidden = !langs.length;
+  syncStack();
+  if (!langs.length) return;
   const col = (l) => colorFor(l.name) || (l.name === 'Other' ? '#6b6b78' : '#8b8b9a');
   bar.innerHTML = langs.map((l) => `<button class="seg" data-l="${esc(l.name)}" style="flex:${l.pct};background:${col(l)}" aria-label="${esc(l.name)} ${l.pct.toFixed(1)} percent" title="${esc(l.name)} · ${l.pct.toFixed(1)}%"></button>`).join('');
   legend.innerHTML = langs.map((l) => `<span class="lg" data-l="${esc(l.name)}"><i style="background:${col(l)}"></i>${esc(l.name)} <b>${l.pct.toFixed(1)}%</b></span>`).join('');
@@ -49,7 +54,10 @@ function renderLangs() {
 let curTab = 0;
 function renderStack() {
   const p = PF.profile;
-  if (!p || !Array.isArray(p.tech) || !p.tech.length) return;
+  const has = !!(p && Array.isArray(p.tech) && p.tech.length);
+  $('.stack-card').hidden = !has;
+  syncStack();
+  if (!has) return;
   if (curTab >= p.tech.length) curTab = 0;
   $('#stackTabs').innerHTML = p.tech.map((c, i) => `<button class="fbtn ${i === curTab ? 'on' : ''}" data-i="${i}">${esc(c.name)} <small>${c.items.length}</small></button>`).join('');
   $('#stackItems').innerHTML = p.tech[curTab].items.map((it, i) => {
@@ -77,24 +85,6 @@ $('#stackItems').addEventListener('click', (e) => {
     hint.textContent = `${name} isn't tied to a specific repository — it's part of how I work or what I'm learning.`;
   }
 });
-
-/* ------------------------------------------------------------------ live GitHub log */
-const ago = (d) => {
-  const s = (Date.now() - new Date(d)) / 1000;
-  if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm ago';
-  if (s < 86400) return Math.round(s / 3600) + 'h ago';
-  if (s < 86400 * 30) return Math.round(s / 86400) + 'd ago';
-  if (s < 86400 * 365) return Math.round(s / (86400 * 30)) + 'mo ago';
-  return Math.round(s / (86400 * 365)) + 'y ago';
-};
-async function loadActivity() {
-  const box = $('#gitLog');
-  try {
-    const items = await (await fetch('/api/github/activity')).json();
-    box.innerHTML = items.length ? items.map((i) => `<a class="log-row" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer"><code>${esc(i.sha || '·······')}</code><span class="msg">${esc(i.message)} <span class="muted">— ${esc(i.repo)}</span></span><span class="meta">${ago(i.date)}</span></a>`).join('')
-      : '<div class="muted small">No recent public activity to show.</div>';
-  } catch { box.innerHTML = '<div class="muted small">Couldn\'t reach GitHub right now.</div>'; }
-}
 
 /* ------------------------------------------------------------------ terminal */
 function initTerminal() {
@@ -265,7 +255,6 @@ addEventListener('pf:profile', renderStack);
 addEventListener('pf:repos', () => { renderLangs(); renderStack(); });
 if (PF.profile) renderStack();
 if (PF.repos.length) { renderLangs(); renderStack(); }
-loadActivity();
 initTerminal();
 initDots();
 initPointerFx();

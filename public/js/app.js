@@ -14,7 +14,29 @@ const ICONS = {
 const LANG_COLORS = { JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572A5', HTML: '#e34c26', CSS: '#563d7c', Java: '#b07219', 'C++': '#f34b7d', C: '#aaaaaa', 'C#': '#178600', Go: '#00ADD8', Rust: '#dea584', PHP: '#4F5D95', Shell: '#89e051', Kotlin: '#A97BFF', Dart: '#00B4AB', Jupyter: '#DA5B0B', 'Jupyter Notebook': '#DA5B0B', Ruby: '#701516', Swift: '#F05138', SCSS: '#c6538c', Vue: '#41b883' };
 
 window.PF = { profile: null, repos: [], languages: [], posts: [], colors: LANG_COLORS, filterLang: () => 0 };
-async function api(u) { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); }
+// One request (or none: the server inlines the data into the page) feeds profile, projects, posts and resume.
+let HOMEP = null;
+const HOME_PICK = { '/api/profile': (d) => d.profile, '/api/repos': (d) => d.repos, '/api/posts': (d) => d.posts, '/api/resume': (d) => d.resume };
+function home() {
+  if (!HOMEP) {
+    const inj = window.__HOME__;
+    HOMEP = inj && inj.repos && inj.repos.repos && inj.repos.repos.length ? Promise.resolve(inj) : fetch('/api/home').then((r) => r.json());
+  }
+  return HOMEP;
+}
+async function api(u) {
+  if (HOME_PICK[u]) return HOME_PICK[u](await home());
+  const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json();
+}
+function renderStudio(s) {
+  s = s || {};
+  const url = /^https?:\/\//i.test(s.url || '') ? s.url : '';
+  $$('[data-kds-name]').forEach((e) => (e.textContent = s.name || 'Kushal Developer Studios'));
+  $$('.kds-link').forEach((el) => {
+    if (url) { el.href = url; el.target = '_blank'; el.rel = 'noopener'; el.hidden = false; }
+    else { el.removeAttribute('href'); el.hidden = el.classList.contains('kds-pill') || el.classList.contains('btn'); }
+  });
+}
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const fmtSize = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
 
@@ -66,7 +88,7 @@ addEventListener('pointermove', (e) => {
 }, { passive: true });
 
 // active link
-const secIds = ['about', 'projects', 'posts', 'resume', 'contact'];
+const secIds = ['home', 'about', 'projects', 'posts', 'resume', 'contact'];
 const so = new IntersectionObserver((es) => es.forEach((e) => {
   if (e.isIntersecting) $$('#navLinks a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id));
 }), { rootMargin: '-45% 0px -50% 0px' });
@@ -92,7 +114,7 @@ if (matchMedia('(hover:hover)').matches) {
 function countUp(el, to) {
   if (!to) { el.textContent = '0'; return; }
   const t0 = performance.now(), d = 1200;
-  const step = (t) => { const p = Math.min(1, (t - t0) / d); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); };
+  const step = (t) => { const p = Math.min(1, (t - t0) / d); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString('en-IN'); if (p < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
 const countWhenSeen = (el, n) => {
@@ -122,7 +144,7 @@ function socialLinks(p, cls) {
 }
 let PROFILE = null;
 function renderProfile(p) {
-  PROFILE = p; PF.profile = p; dispatchEvent(new Event('pf:profile'));
+  PROFILE = p; PF.profile = p; renderStudio(p.studio); $('.marquee').hidden = !(p.skills && p.skills.length); renderStats(); dispatchEvent(new Event('pf:profile'));
   if (typeof POSTS !== 'undefined' && POSTS.length) renderPosts();
   const parts = p.name.split(' ');
   $('#heroName').innerHTML = esc(parts[0]) + (parts.length > 1 ? ' <em>' + esc(parts.slice(1).join(' ')) + '</em>' : '');
@@ -177,11 +199,10 @@ async function loadRepos() {
   try {
     const d = await api('/api/repos');
     REPOS = d.repos; PF.repos = REPOS; PF.languages = d.languages || []; dispatchEvent(new Event('pf:repos'));
-    if (d.user) {
-      $('#repoStat').textContent = REPOS.length || d.user.publicRepos;
-      countWhenSeen($('#statRepos'), d.user.publicRepos);
-      countWhenSeen($('#statFollowers'), d.user.followers);
-    } else $('#repoStat').textContent = REPOS.length;
+    GH_FOLLOWERS = d.user ? d.user.followers : 0;
+    $('#repoStat').textContent = REPOS.length; $('.float.f3').hidden = !REPOS.length;
+    setSection('projects', REPOS.length > 0);
+    renderStats();
     const freq = {};
     REPOS.forEach((r) => (r.langs && r.langs.length ? r.langs : [r.language]).filter(Boolean).forEach((l) => (freq[l] = (freq[l] || 0) + 1)));
     const langs = Object.keys(freq).sort((x, y) => freq[y] - freq[x]).slice(0, 8);
@@ -237,7 +258,8 @@ function renderPosts() {
 async function loadPosts() {
   try {
     POSTS = await api('/api/posts'); PF.posts = POSTS;
-    countWhenSeen($('#statPosts'), POSTS.length);
+    setSection('posts', POSTS.length > 0);
+    renderStats();
     renderPosts();
   } catch { $('#feed').innerHTML = '<div class="empty" style="column-span:all">Couldn\'t load posts.</div>'; }
 }
@@ -249,16 +271,64 @@ async function loadResume() {
   try {
     const r = await api('/api/resume');
     if (!r.available) {
-      $('#resumeMeta').textContent = 'My resume will be available here shortly.';
-      $$('#resumeDl,#resumeView,#heroResume').forEach((a) => a.setAttribute('aria-disabled', 'true'));
-      $('#resumePreview').innerHTML = '<div class="none">No resume uploaded yet.</div>';
+      setSection('resume', false); $('#heroResume').hidden = true; // nothing to show, so hide it
       return;
     }
+    setSection('resume', true); $('#heroResume').hidden = false;
     $('#resumeTitle').textContent = r.label || 'Resume';
     $('#resumeMeta').textContent = `${r.ext.toUpperCase()} · ${fmtSize(r.size)} · Updated ${fmtDate(r.updatedAt)}`;
-    if (r.ext === 'pdf') $('#resumePreview').innerHTML = '<iframe src="/resume/view#toolbar=0&navpanes=0" title="Resume preview"></iframe>';
+    if (r.ext === 'pdf') $('#resumePreview').innerHTML = '<iframe src="/resume/view#toolbar=0&navpanes=0" title="Resume preview" loading="lazy"></iframe>';
     else { $('#resumePreview').innerHTML = '<div class="none">Preview is available for PDF files.<br>Use Download to open it.</div>'; $('#resumeView').style.display = 'none'; }
   } catch { /* leave defaults */ }
+}
+
+/* ---------- hide what is empty ---------- */
+let GH_FOLLOWERS = 0, statSig = '';
+function renumber() {
+  let n = 0;
+  $$('main .section').forEach((sec) => {
+    if (sec.hidden) return;
+    n++;
+    const e = sec.querySelector('.eyebrow'); if (!e) return;
+    e.textContent = String(n).padStart(2, '0') + ' — ' + e.textContent.split('—').slice(1).join('—').trim();
+  });
+}
+function setSection(id, show) {
+  const s = document.getElementById(id); if (!s) return;
+  s.hidden = !show;
+  $$('#navLinks a[href="#' + id + '"], .dots a[data-id="' + id + '"]').forEach((a) => (a.hidden = !show));
+  renumber();
+}
+PF.setSection = setSection;
+// only numbers above zero are shown; with none, the whole row disappears
+function renderStats() {
+  const f = (PROFILE && PROFILE.followers) || {};
+  const show = (PROFILE && PROFILE.statsShow) || {};
+  const custom = ((PROFILE && PROFILE.customStats) || []).filter((c) => c.label && String(c.value).trim() && String(c.value).trim() !== '0');
+  const ov = (PROFILE && PROFILE.statsOverride) || {};
+  // a value typed in the admin panel replaces the real one; blank means "use the real value"
+  const val = (k, real) => {
+    const o = String(ov[k] ?? '').trim();
+    if (!o) return real;
+    return /^\d[\d,]*$/.test(o) ? +o.replace(/,/g, '') : o;
+  };
+  const items = [
+    show.projects !== false && ['Projects', val('projects', REPOS.length)],
+    show.posts !== false && ['Posts shared', val('posts', POSTS.length)],
+    show.githubFollowers !== false && ['GitHub followers', val('githubFollowers', GH_FOLLOWERS)],
+    ['LinkedIn followers', +f.linkedin || 0],
+    ['Instagram followers', +f.instagram || 0],
+    // typed-in numbers count up; text like "5+" is shown as written
+    ...custom.map((c) => [c.label, /^\d[\d,]*$/.test(c.value.trim()) ? +c.value.replace(/,/g, '') : c.value.trim()])
+  ].filter((x) => x && (typeof x[1] === 'string' ? x[1] !== '' : x[1] > 0));
+  const sig = JSON.stringify(items);
+  if (sig === statSig) return;
+  statSig = sig;
+  const row = $('#statsRow');
+  row.hidden = !items.length;
+  row.innerHTML = items.map(([l, v]) => '<article class="card stat reveal"><div class="num">' + (typeof v === 'number' ? '0' : esc(v)) + '</div><div class="muted">' + esc(l) + '</div></article>').join('');
+  $$('.stat', row).forEach((c, i) => { if (typeof items[i][1] === 'number') countWhenSeen($('.num', c), items[i][1]); });
+  observeReveals();
 }
 
 /* ---------- boot ---------- */

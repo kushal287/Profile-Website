@@ -9,10 +9,13 @@
 <meta property="og:description" content="Second-year B.Tech student at NMIT. Projects, posts and resume.">
 <meta property="og:image" content="/assets/kushal.jpg">
 <meta name="theme-color" content="#07070a">
+<!--HOME_DATA-->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='28' fill='%23b6ff3b'/%3E%3Ctext x='50' y='68' font-size='58' font-family='Arial' font-weight='800' text-anchor='middle' fill='%2307070a'%3EK%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preload" as="image" type="image/avif" href="/assets/hero-800.avif" imagesrcset="/assets/hero-400.avif 400w, /assets/hero-800.avif 800w" imagesizes="(max-width:980px) 80vw, 420px" fetchpriority="high">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap"></noscript>
 <link rel="stylesheet" href="/css/style.css">
 <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
@@ -30,6 +33,7 @@
       <a href="#posts">Posts</a>
       <a href="#resume">Resume</a>
       <a href="#contact">Contact</a>
+      <a class="kds-pill kds-link" href="#" hidden title="Kushal Developer Studios"><span class="kds-tile xs"><img src="/assets/kds-logo" alt="" width="40" height="22" decoding="async"></span>KDS ↗</a>
     </div>
     <div class="nav-actions">
       <button class="icon-btn" id="themeBtn" aria-label="Toggle theme" title="Toggle theme">
@@ -54,19 +58,23 @@
         <p class="hero-intro reveal" id="heroIntro"></p>
         <div class="hero-cta reveal">
           <a class="btn btn-primary" href="#projects">View my work <span class="arr">→</span></a>
-          <a class="btn btn-ghost" id="heroResume" href="/resume/download">Download resume <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></a>
+          <a class="btn btn-ghost" id="heroResume" href="/resume/download" hidden>Download resume <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></a>
         </div>
         <div class="socials reveal" id="heroSocials"></div>
       </div>
 
       <div class="hero-photo reveal" id="tilt">
         <div class="photo-frame">
-          <img src="/assets/kushal.jpg" alt="Portrait of Kushal Aggarwal" fetchpriority="high">
+          <picture>
+            <source type="image/avif" srcset="/assets/hero-400.avif 400w, /assets/hero-800.avif 800w" sizes="(max-width:980px) 80vw, 420px">
+            <source type="image/webp" srcset="/assets/hero-400.webp 400w, /assets/hero-800.webp 800w" sizes="(max-width:980px) 80vw, 420px">
+            <img src="/assets/hero-800.jpg" srcset="/assets/hero-400.jpg 400w, /assets/hero-800.jpg 800w" sizes="(max-width:980px) 80vw, 420px" width="800" height="1000" alt="Portrait of Kushal Aggarwal" fetchpriority="high" decoding="async">
+          </picture>
           <div class="photo-shade"></div>
         </div>
         <div class="float f1"><b>B.Tech</b><span>NMIT · 2nd year</span></div>
         <div class="float f2"><span class="dot"></span><span id="locBadge">Bengaluru, India</span></div>
-        <div class="float f3"><b id="repoStat">–</b><span>GitHub repos</span></div>
+        <div class="float f3" hidden><b id="repoStat">–</b><span>GitHub repos</span></div>
       </div>
     </div>
     <a href="#about" class="scroll-hint" aria-label="Scroll down"><span></span></a>
@@ -90,9 +98,7 @@
           <p class="muted" id="eduDegree"></p>
           <div class="chips"><span class="chip" id="eduYear"></span><span class="chip" id="eduPlace"></span></div>
         </article>
-        <article class="card stat reveal"><div class="num" data-count id="statRepos">0</div><div class="muted">Public repositories</div></article>
-        <article class="card stat reveal"><div class="num" data-count id="statPosts">0</div><div class="muted">Posts shared</div></article>
-        <article class="card stat reveal"><div class="num" data-count id="statFollowers">0</div><div class="muted">GitHub followers</div></article>
+        <div class="stats-row" id="statsRow" hidden></div>
         <article class="card skills reveal">
           <div class="card-tag">Toolbox &amp; interests</div>
           <div class="chips" id="skills"></div>
@@ -101,39 +107,43 @@
           <div class="card-tag">Find me online</div>
           <div class="connect-list" id="aboutSocials"></div>
         </article>
+        <article class="card studio reveal">
+          <div class="kds-tile"><img src="/assets/kds-logo" alt="KDS logo" width="90" height="48" loading="lazy" decoding="async"></div>
+          <div class="studio-text">
+            <div class="card-tag">My studio</div>
+            <h3 data-kds-name>Kushal Developer Studios</h3>
+            <p class="muted">Visit the studio website to see what we're building.</p>
+          </div>
+          <a class="btn btn-primary kds-link" href="#" hidden>Visit KDS <span class="arr">↗</span></a>
+        </article>
       </div>
     </div>
   </section>
 
   <!-- TECH STACK -->
-  <section class="section" id="stack">
+  <section class="section" id="stack" hidden>
     <div class="wrap">
       <div class="eyebrow reveal">02 — Tech stack</div>
       <h2 class="h2 reveal">Languages &amp; tools<br><em>I work with.</em></h2>
       <p class="muted lead reveal">Everything here is clickable — pick a technology and my projects filter to match.</p>
       <div class="stack-grid">
-        <article class="card lang-card reveal">
+        <article class="card lang-card reveal" hidden>
           <div class="card-tag">Language mix · measured from my GitHub code</div>
           <div class="lang-bar" id="langBar" aria-label="Language breakdown"></div>
           <div class="lang-legend" id="langLegend"></div>
         </article>
-        <article class="card stack-card reveal">
+        <article class="card stack-card reveal" hidden>
           <div class="card-tag">Explore my stack</div>
           <div class="filters" id="stackTabs"></div>
           <div class="stack-items" id="stackItems"></div>
           <p class="stack-hint muted" id="stackHint" aria-live="polite">Tip: click a technology to see the projects that use it.</p>
-        </article>
-        <article class="card git-card reveal">
-          <div class="card-tag"><span class="live"></span> Live from GitHub</div>
-          <div class="git-cmd"><span class="prompt">$</span> git log --oneline<span class="caret"></span></div>
-          <div class="git-log" id="gitLog"><div class="muted small">Loading latest commits…</div></div>
         </article>
       </div>
     </div>
   </section>
 
   <!-- PROJECTS -->
-  <section class="section" id="projects">
+  <section class="section" id="projects" hidden>
     <div class="wrap">
       <div class="eyebrow reveal">03 — Projects</div>
       <div class="head-row">
@@ -150,7 +160,7 @@
   </section>
 
   <!-- POSTS -->
-  <section class="section" id="posts">
+  <section class="section" id="posts" hidden>
     <div class="wrap">
       <div class="eyebrow reveal">04 — My Posts</div>
       <div class="head-row">
@@ -162,7 +172,7 @@
   </section>
 
   <!-- RESUME -->
-  <section class="section" id="resume">
+  <section class="section" id="resume" hidden>
     <div class="wrap">
       <div class="eyebrow reveal">05 — Resume</div>
       <h2 class="h2 reveal">The <em>short</em> version.</h2>
@@ -202,13 +212,14 @@
 <footer class="footer">
   <div class="wrap foot-row">
     <span>© <span id="year"></span> Kushal Aggarwal. Built with care.</span>
+    <a class="kds-foot kds-link" href="#"><span class="kds-tile sm"><img src="/assets/kds-logo" alt="KDS" width="40" height="22" loading="lazy" decoding="async"></span><span>Part of <b data-kds-name>Kushal Developer Studios</b></span></a>
     <a href="#home">Back to top ↑</a>
   </div>
 </footer>
 
 <div class="lightbox" id="lightbox" hidden><button class="lb-close" aria-label="Close">✕</button><img alt=""></div>
-<script src="/js/bg.js"></script>
-<script src="/js/app.js"></script>
-<script src="/js/extras.js"></script>
+<script src="/js/bg.js" defer></script>
+<script src="/js/app.js" defer></script>
+<script src="/js/extras.js" defer></script>
 </body>
 </html>

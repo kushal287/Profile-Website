@@ -5,7 +5,9 @@
 try { process.loadEnvFile(); } catch { /* no .env file, use real env */ }
 
 const express = require('express');
+const compression = require('compression');
 const multer = require('multer');
+let sharp = null; try { sharp = require('sharp'); } catch { /* optional: uploads are then stored as-is */ }
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -56,6 +58,11 @@ const DEFAULT_DB = {
       { name: 'Exploring', items: [{ name: 'AI / Machine Learning' }, { name: 'Data Structures & Algorithms' }, { name: 'Backend Development' }] }
     ],
     email: '',
+    studio: { name: 'Kushal Developer Studios', short: 'KDS', url: '' }, // set the link in Admin → Profile
+    followers: { linkedin: 0, instagram: 0 }, // typed in by hand (these sites don't allow reading them)
+    statsShow: { projects: true, posts: true, githubFollowers: true }, // automatic numbers can be switched off
+    statsOverride: { projects: '', posts: '', githubFollowers: '' }, // blank = use the real value
+    customStats: [], // [{ label, value }] typed in by hand, e.g. Hackathons: 3
     socials: {
       github: 'https://github.com/kushal287',
       linkedin: 'https://www.linkedin.com/in/kushal-aggarwal-17464a373',
@@ -257,10 +264,23 @@ async function getGithub(force = false) {
     ]);
     await fillLanguages(repos);
     ghCache = { at: Date.now(), user, repos, error: null };
+    saveGhCache();
   } catch (e) {
-    ghCache = { ...ghCache, at: ghCache.repos.length ? ghCache.at : 0, error: e.message };
+    // keep serving the last good data and try again in about a minute
+    ghCache = { ...ghCache, at: ghCache.repos.length ? Date.now() - 9 * 60 * 1000 : 0, error: e.message };
   }
   return ghCache;
+}
+// Remember GitHub data on disk: restarts and temporary rate limits (60 requests/hour without a token)
+// then keep showing the last good data instead of an empty projects list.
+const GH_CACHE_FILE = path.join(DATA_DIR, 'github-cache.json');
+try {
+  const c = JSON.parse(fs.readFileSync(GH_CACHE_FILE, 'utf8'));
+  ghCache = { at: 0, user: c.user || null, repos: c.repos || [], error: null };
+  for (const [k, v] of Object.entries(c.langs || {})) langCache.set(k, v);
+} catch { /* no cache yet */ }
+function saveGhCache() {
+  try { fs.writeFileSync(GH_CACHE_FILE, JSON.stringify({ user: ghCache.user, repos: ghCache.repos, langs: Object.fromEntries(langCache) })); } catch { /* ignore */ }
 }
 function repoView(r) {
   const cfg = db.repos[r.name] || {};
@@ -320,6 +340,19 @@ function attachmentFrom(f, sub) {
     size: f.size
   };
 }
+async function optimizeUploads(files) {
+  if (!sharp) return;
+  for (const f of files || []) {
+    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(f.filename).toLowerCase())) continue;
+    const out = f.filename.replace(/\.[^.]+$/, '') + '-o.webp';
+    const outPath = path.join(path.dirname(f.path), out);
+    try {
+      const info = await sharp(f.path).rotate().resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toFile(outPath);
+      fs.unlink(f.path, () => {});
+      f.filename = out; f.path = outPath; f.size = info.size;
+    } catch { /* keep the original if conversion fails */ }
+  }
+}
 function deleteUpload(url) {
   if (!url || !url.startsWith('/uploads/')) return;
   const p = path.normalize(path.join(ROOT, url));
@@ -340,13 +373,13 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
+app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 
 /* ---------- public API ---------- */
 app.get('/api/profile', (req, res) => res.json(db.profile));
 
-app.get('/api/repos', async (req, res) => {
-  const gh = await getGithub();
+function reposPayload(gh) {
   const repos = gh.repos.map(repoView).filter((r) => !r.hidden)
     .sort((a, b) => (b.pinned - a.pinned) || new Date(b.updatedAt) - new Date(a.updatedAt));
   const bytes = {};
@@ -356,46 +389,30 @@ app.get('/api/repos', async (req, res) => {
   const small = languages.filter((l) => l.pct < 1.5).reduce((a, l) => a + l.pct, 0);
   languages = languages.filter((l) => l.pct >= 1.5);
   if (small > 0) languages.push({ name: 'Other', pct: small });
-  res.json({
+  return {
     repos: repos.map((r) => ({ ...r, langBytes: undefined })),
     languages,
     user: gh.user && { followers: gh.user.followers, publicRepos: gh.user.public_repos, avatar: gh.user.avatar_url, url: gh.user.html_url },
     error: repos.length ? null : gh.error
-  });
-});
-
-let actCache = { at: 0, items: [] };
-// Latest commits across the repos that are visible on the site (GitHub's events feed no longer carries commit messages).
-app.get('/api/github/activity', async (req, res) => {
-  const gh = await getGithub();
-  const views = gh.repos.map(repoView);
-  if (Date.now() - actCache.at > 10 * 60 * 1000) {
-    const pick = views.filter((r) => !r.hidden).sort((x, y) => new Date(y.updatedAt) - new Date(x.updatedAt)).slice(0, 6);
-    const lists = await Promise.all(pick.map(async (r) => {
-      try {
-        const cs = await ghFetch(`https://api.github.com/repos/${r.fullName}/commits?per_page=3`);
-        return cs.map((c) => ({ repo: r.name, message: String((c.commit && c.commit.message) || '').split('\n')[0].slice(0, 110), sha: String(c.sha || '').slice(0, 7), url: c.html_url, date: c.commit && c.commit.author && c.commit.author.date }));
-      } catch { return null; }
-    }));
-    if (lists.some(Boolean) || !actCache.items.length) {
-      actCache = { at: Date.now(), items: lists.flat().filter(Boolean).sort((x, y) => new Date(y.date) - new Date(x.date)) };
-    } else actCache.at = Date.now() - 9 * 60 * 1000; // all calls failed: keep old data, retry in a minute
-  }
-  const hidden = new Set(views.filter((r) => r.hidden).map((r) => r.name));
-  res.json(actCache.items.filter((i) => !hidden.has(i.repo)).slice(0, 8));
-});
-
+  };
+}
 function publicFeed() {
   return db.posts.filter((p) => !p.hidden).map((p) => ({
     id: p.id, kind: 'own', text: p.text, attachments: p.attachments, pinned: !!p.pinned, date: p.createdAt
   })).sort((a, b) => (b.pinned - a.pinned) || new Date(b.date) - new Date(a.date));
 }
-app.get('/api/posts', (req, res) => res.json(publicFeed()));
-
-app.get('/api/resume', (req, res) => {
+function resumePayload() {
   const r = db.resume.items.find((x) => x.id === db.resume.activeId);
-  res.json(r ? { available: true, label: r.label, ext: path.extname(r.file).slice(1), updatedAt: r.uploadedAt, size: r.size } : { available: false });
-});
+  return r ? { available: true, label: r.label, ext: path.extname(r.file).slice(1), updatedAt: r.uploadedAt, size: r.size } : { available: false };
+}
+const homePayload = (gh) => ({ profile: db.profile, repos: reposPayload(gh), posts: publicFeed(), resume: resumePayload() });
+
+app.get('/api/repos', async (req, res) => res.json(reposPayload(await getGithub())));
+app.get('/api/posts', (req, res) => res.json(publicFeed()));
+app.get('/api/resume', (req, res) => res.json(resumePayload()));
+// everything the home page needs in ONE request
+app.get('/api/home', async (req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.json(homePayload(await getGithub())); });
+
 function activeResume() {
   const r = db.resume.items.find((x) => x.id === db.resume.activeId);
   return r && { r, file: path.join(UPLOAD_DIR, 'resume', r.file) };
@@ -444,6 +461,8 @@ admin.get('/overview', async (req, res) => {
     posts: db.posts.length,
     repos: repos.length,
     reposVisible: repos.filter((r) => !r.hidden).length,
+    postsLive: db.posts.filter((p) => !p.hidden).length,
+    githubFollowers: gh.user ? gh.user.followers : 0,
     resume: db.resume.items.length,
     ai: aiProviders().map((p) => p.name),
     githubError: gh.error
@@ -468,6 +487,41 @@ admin.put('/profile', (req, res) => {
       }).filter(Boolean) : []
     })).filter((c) => c.name && c.items.length);
   }
+  if (b.statsShow && typeof b.statsShow === 'object') {
+    p.statsShow = p.statsShow || {};
+    for (const k of ['projects', 'posts', 'githubFollowers']) if (typeof b.statsShow[k] === 'boolean') p.statsShow[k] = b.statsShow[k];
+  }
+  if (b.statsOverride && typeof b.statsOverride === 'object') {
+    p.statsOverride = p.statsOverride || {};
+    for (const k of ['projects', 'posts', 'githubFollowers']) {
+      const v = str(String(b.statsOverride[k] ?? ''), 12);
+      if (v !== undefined) p.statsOverride[k] = v;
+    }
+  }
+  if (Array.isArray(b.customStats)) {
+    p.customStats = b.customStats.slice(0, 6)
+      .map((c) => ({ label: str(c && c.label, 30) || '', value: str(String((c && c.value) ?? ''), 12) || '' }))
+      .filter((c) => c.label && c.value);
+  }
+  if (b.followers && typeof b.followers === 'object') {
+    p.followers = p.followers || {};
+    for (const k of ['linkedin', 'instagram']) {
+      const n = Math.floor(Number(b.followers[k]));
+      if (Number.isFinite(n) && n >= 0 && n <= 1e9) p.followers[k] = n;
+    }
+  }
+  if (b.studio && typeof b.studio === 'object') {
+    p.studio = p.studio || { name: 'Kushal Developer Studios', short: 'KDS', url: '' };
+    const nm = str(b.studio.name, 60); if (nm) p.studio.name = nm;
+    if (typeof b.studio.url === 'string') {
+      const u = b.studio.url.trim();
+      if (!u) p.studio.url = '';
+      else {
+        const w = /^https?:\/\//i.test(u) ? u : 'https://' + u;
+        try { new URL(w); p.studio.url = w.slice(0, 300); } catch { /* ignore an invalid address */ }
+      }
+    }
+  }
   if (Array.isArray(b.bio)) p.bio = b.bio.map((x) => str(x, 1500)).filter(Boolean).slice(0, 8);
   if (b.education && typeof b.education === 'object') {
     for (const k of ['school', 'degree', 'year', 'place']) { const v = str(b.education[k], 160); if (v !== undefined) p.education[k] = v; }
@@ -486,14 +540,16 @@ admin.put('/profile', (req, res) => {
 
 /* posts */
 admin.get('/posts', (req, res) => res.json(db.posts.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))));
-admin.post('/posts', postUpload.array('files', 8), (req, res) => {
+admin.post('/posts', postUpload.array('files', 8), async (req, res) => {
+  await optimizeUploads(req.files);
   const text = String(req.body.text || '').trim();
   const attachments = (req.files || []).map((f) => attachmentFrom(f, 'posts'));
   if (!text && !attachments.length) return res.status(400).json({ error: 'Write something or attach a file' });
   const p = { id: uid(), text: text.slice(0, 10000), attachments, pinned: req.body.pinned === 'true', hidden: false, createdAt: now(), updatedAt: now() };
   db.posts.push(p); saveDb(); res.json(p);
 });
-admin.put('/posts/:id', postUpload.array('files', 8), (req, res) => {
+admin.put('/posts/:id', postUpload.array('files', 8), async (req, res) => {
+  await optimizeUploads(req.files);
   const p = db.posts.find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'Not found' });
   if (req.body.text !== undefined) p.text = String(req.body.text).trim().slice(0, 10000);
@@ -582,7 +638,32 @@ app.use(ADMIN_PATH + '/static', (req, res, next) => { res.setHeader('Cache-Contr
   express.static(path.join(ROOT, 'admin'), { index: false }));
 
 app.get('/robots.txt', (req, res) => res.type('text').send('User-agent: *\nAllow: /\n'));
-app.use(express.static(path.join(ROOT, 'public'), { extensions: ['html'] }));
+// The home page ships with its data inlined, so it can paint without waiting for any API call.
+app.get(['/', '/index.html'], (req, res, next) => {
+  try {
+    const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+    getGithub().catch(() => {}); // refresh GitHub data in the background, never block the page on it
+    const data = JSON.stringify(homePayload(ghCache)).replace(/</g, '\\u003c');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(html.replace('<!--HOME_DATA-->', '<script>window.__HOME__=' + data + '</script>'));
+  } catch (e) { next(e); }
+});
+// Studio logo: drop your own file in public/assets as kds-logo.png (or .webp/.jpg) and it replaces the built-in SVG.
+app.get('/assets/kds-logo', (req, res, next) => {
+  const dir = path.join(ROOT, 'public', 'assets');
+  const f = ['png', 'webp', 'jpg', 'jpeg', 'svg'].map((e) => path.join(dir, 'kds-logo.' + e)).find((p) => fs.existsSync(p));
+  if (!f) return next();
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(f);
+});
+app.use(express.static(path.join(ROOT, 'public'), {
+  extensions: ['html'],
+  setHeaders(res, file) {
+    // code revalidates (cheap 304s); images are cached for a week
+    res.setHeader('Cache-Control', /\.(css|js|html)$/.test(file) ? 'no-cache' : 'public, max-age=604800');
+    if (file.endsWith('.avif')) res.setHeader('Content-Type', 'image/avif');
+  }
+}));
 
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });

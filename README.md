@@ -25,6 +25,28 @@ session is a signed httpOnly cookie, and 6 wrong tries lock that IP out for 15 m
 | Resume | Upload new versions, choose which is live, rename, delete |
 | Profile | Edit bio, roles, skills, **tech stack** (`Category: Item, Item @80`), education, social links |
 
+## Studio link (KDS)
+
+Admin → Profile → **Studio link (KDS)**: set the studio name and website address. The KDS logo and link then
+show in the navigation bar, the About section and the footer. Leave the address empty to hide the link.
+The built-in logo is `public/assets/kds-logo.svg`; to use your original image, save it as
+`public/assets/kds-logo.png` (it takes priority automatically).
+
+## Speed and images
+
+- The home page ships with its data already inlined, so it paints without waiting for API calls; responses are gzip-compressed.
+- The hero photo is served as AVIF / WebP / JPEG in two sizes. After changing `public/assets/kushal.jpg`, run `node scripts/optimize-images.js`.
+- Photos uploaded in posts are automatically resized (max 1600 px) and converted to WebP.
+- GitHub data is cached on disk (`data/github-cache.json`), so restarts and GitHub's rate limit (60 requests/hour without a token) don't empty your projects. Set `GITHUB_TOKEN` in `.env` for a much higher limit.
+- The background renders at reduced resolution, slows itself down on weak devices and pauses in hidden tabs.
+
+## Numbers on the home page
+
+Profile → **Numbers on the home page**: Projects, Posts shared and GitHub followers are real values read
+automatically (switch any off). LinkedIn / Instagram followers are typed in by hand because those sites
+don't allow reading them. You can also add your own numbers (`Hackathons: 3`, `Years coding: 5+`).
+A number shows only when it is above 0, and empty sections hide themselves.
+
 ## Interactive tech section
 
 - **Language mix** is measured from the code in your visible GitHub repos (forks are left out by default). Click a language to filter Projects.
