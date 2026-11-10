@@ -6,6 +6,7 @@ try { process.loadEnvFile(); } catch { /* no .env file, use real env */ }
 
 const express = require('express');
 const compression = require('compression');
+const persist = require('./persist');
 const multer = require('multer');
 let sharp = null; try { sharp = require('sharp'); } catch { /* optional: uploads are then stored as-is */ }
 const crypto = require('crypto');
@@ -98,6 +99,7 @@ function saveDb() {
   const tmp = DB_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, DB_FILE);
+  persist.saveSoon(DB_FILE);
 }
 loadDb();
 delete db.linkedin; // LinkedIn integration was removed
@@ -109,10 +111,12 @@ const now = () => new Date().toISOString();
  * Auth — password check on the server, signed httpOnly cookie
  * ------------------------------------------------------------------ */
 const SECRET_FILE = path.join(DATA_DIR, '.secret');
-let SECRET;
-try { SECRET = fs.readFileSync(SECRET_FILE, 'utf8'); } catch {
-  SECRET = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(SECRET_FILE, SECRET);
+let SECRET = process.env.SESSION_SECRET || '';
+if (!SECRET) {
+  try { SECRET = fs.readFileSync(SECRET_FILE, 'utf8'); } catch {
+    SECRET = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(SECRET_FILE, SECRET);
+  }
 }
 const SESSION_MS = 1000 * 60 * 60 * 12; // 12h
 
@@ -364,7 +368,7 @@ async function optimizeUploads(files) {
 function deleteUpload(url) {
   if (!url || !url.startsWith('/uploads/')) return;
   const p = path.normalize(path.join(UPLOAD_DIR, url.slice('/uploads/'.length)));
-  if (p.startsWith(UPLOAD_DIR + path.sep)) fs.unlink(p, () => {});
+  if (p.startsWith(UPLOAD_DIR + path.sep)) { fs.unlink(p, () => {}); persist.removeUpload(url); }
 }
 
 /* ------------------------------------------------------------------ *
@@ -551,6 +555,7 @@ admin.put('/profile', (req, res) => {
 admin.get('/posts', (req, res) => res.json(db.posts.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))));
 admin.post('/posts', postUpload.array('files', 8), async (req, res) => {
   await optimizeUploads(req.files);
+  for (const f of req.files || []) persist.pushNow(f.path);
   const text = String(req.body.text || '').trim();
   const attachments = (req.files || []).map((f) => attachmentFrom(f, 'posts'));
   if (!text && !attachments.length) return res.status(400).json({ error: 'Write something or attach a file' });
@@ -559,6 +564,7 @@ admin.post('/posts', postUpload.array('files', 8), async (req, res) => {
 });
 admin.put('/posts/:id', postUpload.array('files', 8), async (req, res) => {
   await optimizeUploads(req.files);
+  for (const f of req.files || []) persist.pushNow(f.path);
   const p = db.posts.find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'Not found' });
   if (req.body.text !== undefined) p.text = String(req.body.text).trim().slice(0, 10000);
@@ -605,6 +611,7 @@ admin.put('/repos/:name', (req, res) => {
 admin.get('/resume', (req, res) => res.json(db.resume));
 admin.post('/resume', resumeUpload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Choose a PDF / DOC / DOCX file' });
+  persist.pushNow(req.file.path);
   const item = {
     id: uid(), label: String(req.body.label || req.file.originalname).trim().slice(0, 100),
     file: req.file.filename, originalName: req.file.originalname, size: req.file.size, uploadedAt: now()
@@ -683,6 +690,9 @@ app.use((err, req, res, next) => { // eslint-disable-line
   res.status(code).json({ error: err.message || 'Server error' });
 });
 
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => { persist.flush().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 20000).unref(); });
+}
 app.listen(PORT, () => {
   console.log(`Portfolio running → http://localhost:${PORT}`);
   console.log(`Admin → http://localhost:${PORT}${ADMIN_PATH}`);

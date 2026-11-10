@@ -74,15 +74,24 @@ Keys stay on the server and are never sent to the browser.
 
 ## Deploying
 
-Needs a Node host with a persistent disk (Render, Railway, Fly.io, a VPS) — posts, uploads, the resume and
-settings are saved as files. Set `STORAGE_DIR` to the disk's mount path and everything (`data/` + `uploads/`)
-is kept there.
+The site saves posts, uploads, the resume and settings as files. Hosts with a **persistent disk** (Render paid
+plans, Railway, Fly.io, a VPS) can keep them there: set `STORAGE_DIR` to the disk's mount path and both
+`data/` and `uploads/` live on it.
 
-### Render
+### Render — free plan
 
-1. Push this repo to GitHub.
-2. Render → **New → Blueprint** → pick the repo (it reads `render.yaml`), or **New → Web Service** and set
-   Build `npm install`, Start `npm start`, plus a **Disk** mounted at `/var/data`.
-3. Environment variables: `NODE_VERSION=22`, `STORAGE_DIR=/var/data`, `ADMIN_PASSWORD`, `AI_PROVIDER=gemini`,
-   `AI_MODEL=gemini-2.5-flash`, `AI_API_KEY`, `GITHUB_USERNAME=kushal287`, `GITHUB_TOKEN` (recommended).
-4. Deploy, open `https://<your-service>.onrender.com/aaddmmiinn` and log in.
+Render's free plan has no persistent disk and sleeps after ~15 minutes without visitors (the first visit then
+takes about a minute to wake it). To keep your content anyway, the site saves it to a **private GitHub repo**
+and restores it every time it starts.
+
+1. On GitHub create a **private** repo named `portfolio-data`, tick *Add a README* (it can stay otherwise empty).
+2. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate:
+   repository access *Only select repositories* → `portfolio-data`; permission **Contents: Read and write**.
+3. Render → **New → Blueprint** → pick this repo (it reads `render.yaml`) and enter `ADMIN_PASSWORD`,
+   `AI_API_KEY` and `GITHUB_TOKEN` (the token from step 2) when asked.
+4. Deploy, open `https://<your-service>.onrender.com/aaddmmiinn` and log in. Changes are saved to the data
+   repo within a few seconds.
+
+Details: `bootstrap.js` restores the data repo before the site starts, and refuses to start (instead of running
+empty) if GitHub can't be reached, so saved data is never overwritten by an empty copy. `persist.js` does the
+syncing. Without `PERSIST_GITHUB_REPO` / a token it is switched off and files simply stay on local disk.

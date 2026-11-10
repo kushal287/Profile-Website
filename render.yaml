@@ -1,21 +1,23 @@
-# Render "Blueprint": creates the web service, its persistent disk and the settings in one go.
-# (Dashboard → New → Blueprint → pick this repo.) Secrets are asked for during setup and never stored in Git.
+# Render "Blueprint" for the FREE plan (Dashboard → New → Blueprint → pick this repo).
+# The free plan has no persistent disk, so posts / uploads / resume / settings are kept in a private GitHub
+# repo ("data repo", see PERSIST_GITHUB_REPO) and restored every time the service starts.
+# Secrets are asked for during setup and are never stored in Git.
 services:
   - type: web
     name: kushal-portfolio
     runtime: node
-    plan: starter            # a persistent disk needs a paid plan
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /
-    autoDeploy: true         # redeploys on every push to the branch
+    autoDeploy: true            # redeploys on every push to the branch
     envVars:
       - key: NODE_VERSION
         value: 22
-      - key: STORAGE_DIR     # posts, uploads, resume and settings live on the disk below
-        value: /var/data
       - key: ADMIN_PASSWORD
         sync: false
+      - key: SESSION_SECRET     # keeps you logged in across restarts
+        generateValue: true
       - key: AI_PROVIDER
         value: gemini
       - key: AI_MODEL
@@ -24,9 +26,7 @@ services:
         sync: false
       - key: GITHUB_USERNAME
         value: kushal287
-      - key: GITHUB_TOKEN    # strongly recommended on Render (shared IPs hit GitHub's anonymous limit)
+      - key: PERSIST_GITHUB_REPO   # your PRIVATE data repo, e.g. kushal287/portfolio-data
+        value: kushal287/portfolio-data
+      - key: GITHUB_TOKEN          # fine-grained token with Contents read+write on the data repo
         sync: false
-    disk:
-      name: portfolio-data
-      mountPath: /var/data
-      sizeGB: 1
