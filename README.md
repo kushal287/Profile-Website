@@ -74,6 +74,15 @@ Keys stay on the server and are never sent to the browser.
 
 ## Deploying
 
-Needs a Node host with a persistent disk (Render, Railway, Fly.io, a VPS). Keep `data/` and
-`uploads/` on that disk, set `ADMIN_PASSWORD`, `AI_PROVIDER`, `AI_API_KEY` as environment variables, and
-serve over HTTPS.
+Needs a Node host with a persistent disk (Render, Railway, Fly.io, a VPS) — posts, uploads, the resume and
+settings are saved as files. Set `STORAGE_DIR` to the disk's mount path and everything (`data/` + `uploads/`)
+is kept there.
+
+### Render
+
+1. Push this repo to GitHub.
+2. Render → **New → Blueprint** → pick the repo (it reads `render.yaml`), or **New → Web Service** and set
+   Build `npm install`, Start `npm start`, plus a **Disk** mounted at `/var/data`.
+3. Environment variables: `NODE_VERSION=22`, `STORAGE_DIR=/var/data`, `ADMIN_PASSWORD`, `AI_PROVIDER=gemini`,
+   `AI_MODEL=gemini-2.5-flash`, `AI_API_KEY`, `GITHUB_USERNAME=kushal287`, `GITHUB_TOKEN` (recommended).
+4. Deploy, open `https://<your-service>.onrender.com/aaddmmiinn` and log in.

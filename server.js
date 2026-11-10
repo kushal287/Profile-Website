@@ -18,8 +18,10 @@ const GITHUB_USER = process.env.GITHUB_USERNAME || 'kushal287';
 const ADMIN_PATH = '/aaddmmiinn';
 
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, 'data');
-const UPLOAD_DIR = path.join(ROOT, 'uploads');
+// STORAGE_DIR lets a host keep everything that must survive restarts (data + uploads) on one persistent disk.
+const STORAGE_DIR = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : ROOT;
+const DATA_DIR = path.join(STORAGE_DIR, 'data');
+const UPLOAD_DIR = path.join(STORAGE_DIR, 'uploads');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 for (const d of [DATA_DIR, UPLOAD_DIR, path.join(UPLOAD_DIR, 'posts'), path.join(UPLOAD_DIR, 'resume')]) {
   fs.mkdirSync(d, { recursive: true });
@@ -361,7 +363,7 @@ async function optimizeUploads(files) {
 }
 function deleteUpload(url) {
   if (!url || !url.startsWith('/uploads/')) return;
-  const p = path.normalize(path.join(ROOT, url));
+  const p = path.normalize(path.join(UPLOAD_DIR, url.slice('/uploads/'.length)));
   if (p.startsWith(UPLOAD_DIR + path.sep)) fs.unlink(p, () => {});
 }
 

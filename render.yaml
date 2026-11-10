@@ -1,0 +1,32 @@
+# Render "Blueprint": creates the web service, its persistent disk and the settings in one go.
+# (Dashboard → New → Blueprint → pick this repo.) Secrets are asked for during setup and never stored in Git.
+services:
+  - type: web
+    name: kushal-portfolio
+    runtime: node
+    plan: starter            # a persistent disk needs a paid plan
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true         # redeploys on every push to the branch
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: STORAGE_DIR     # posts, uploads, resume and settings live on the disk below
+        value: /var/data
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AI_PROVIDER
+        value: gemini
+      - key: AI_MODEL
+        value: gemini-2.5-flash
+      - key: AI_API_KEY
+        sync: false
+      - key: GITHUB_USERNAME
+        value: kushal287
+      - key: GITHUB_TOKEN    # strongly recommended on Render (shared IPs hit GitHub's anonymous limit)
+        sync: false
+    disk:
+      name: portfolio-data
+      mountPath: /var/data
+      sizeGB: 1
